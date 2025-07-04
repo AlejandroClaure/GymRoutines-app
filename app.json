@@ -11,6 +11,12 @@
     "ios": {
       "supportsTablet": true
     },
+    "permissions": [
+      {
+        "name": "audioRecording",
+        "reason": "Necesario para reproducir sonidos durante la rutina."
+      }
+    ],
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
@@ -33,10 +39,19 @@
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
         }
-      ]
+      ],
+      "expo-audio",
+      "expo-web-browser"
     ],
     "experiments": {
       "typedRoutes": true
-    }
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "c7d03b3b-4c1b-4beb-8077-d55a6e62180b"
+      }
+    },
+    "owner": "aleclau12"
   }
 }
