@@ -1,3 +1,5 @@
+// app/rutina/editar/[id].tsx
+
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -8,6 +10,7 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Switch,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { supabase } from "@/lib/supabase";
@@ -16,38 +19,44 @@ import { v4 as uuidv4 } from "uuid";
 // Definición de interfaces para ejercicios y bloques
 interface Exercise {
   id: string;
-  name: string;
-  duration?: number;
-  reps?: number;
-  equipment?: string;
-  block_id?: string;
+  name: string; // Nombre del ejercicio (o título en bloques de preparación)
+  order: number; // Orden dentro del bloque
+  duration?: number; // Duración en segundos
+  reps?: number; // Cantidad de repeticiones
+  equipment?: string; // Equipamiento necesario
+  block_id?: string; // ID del bloque asociado
 }
 
 interface Block {
   id: string;
-  title: string;
-  repeat: number;
-  exercises: Exercise[];
+  title: string; // Título del bloque
+  order: number; // Orden dentro de la rutina
+  repeat: string; // Cantidad de repeticiones (como string para el input)
+  is_preparation?: boolean; // Indica si es bloque de preparación
+  exercises: Exercise[]; // Lista de ejercicios
 }
 
 export default function EditRoutineScreen() {
-  // Obtiene el ID de la rutina desde los parámetros de la URL
   const { id } = useLocalSearchParams<{ id: string }>();
-  // Hook para manejar la navegación
   const router = useRouter();
 
   // Estados para los datos de la rutina
-  const [routineName, setRoutineName] = useState(""); // Nombre de la rutina
-  const [style, setStyle] = useState(""); // Estilo (ej: Fuerza, Cardio)
-  const [level, setLevel] = useState(""); // Nivel (ej: Principiante)
-  const [duration, setDuration] = useState(""); // Duración total en minutos
-  const [restBetweenExercises, setRestBetweenExercises] = useState("20"); // Descanso entre ejercicios
-  const [restBetweenBlocks, setRestBetweenBlocks] = useState("60"); // Descanso entre bloques
-  const [blocks, setBlocks] = useState<Block[]>([]); // Lista de bloques
-  const [loading, setLoading] = useState(false); // Estado de carga
-  const [error, setError] = useState<string | null>(null); // Estado de error
+  const [routineName, setRoutineName] = useState("");
+  const [style, setStyle] = useState("");
+  const [level, setLevel] = useState("");
+  const [duration, setDuration] = useState("");
+  const [restBetweenExercises, setRestBetweenExercises] = useState("20");
+  const [restBetweenBlocks, setRestBetweenBlocks] = useState("60");
+  const [blocks, setBlocks] = useState<Block[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  // Efecto para cargar los datos de la rutina al montar el componente
+  // Función para restringir input a solo números
+  const restrictToNumbers = (text: string) => {
+    return text.replace(/[^0-9]/g, ""); // Elimina todo lo que no sea dígito
+  };
+
+  // Efecto para cargar los datos de la rutina
   useEffect(() => {
     console.log("🧪 Iniciando carga de datos para rutina con ID:", id);
     if (!id) {
@@ -56,7 +65,6 @@ export default function EditRoutineScreen() {
       return;
     }
 
-    // Función para obtener datos de la rutina desde Supabase
     const fetchData = async () => {
       setLoading(true);
       try {
@@ -84,8 +92,9 @@ export default function EditRoutineScreen() {
         console.log("📡 Obteniendo bloques...");
         const { data: blockData, error: blockError } = await supabase
           .from("blocks")
-          .select("id, title, repeat")
-          .eq("routine_id", id);
+          .select("id, title, repeat, is_preparation, order")
+          .eq("routine_id", id)
+          .order("order", { ascending: true });
 
         if (blockError || !blockData) {
           console.log("❌ Error al cargar bloques:", blockError?.message || "No data");
@@ -98,8 +107,9 @@ export default function EditRoutineScreen() {
         console.log("📡 Obteniendo ejercicios para bloques:", blockIds);
         const { data: exerciseData, error: exerciseError } = await supabase
           .from("exercises")
-          .select("*")
-          .in("block_id", blockIds);
+          .select("id, name, duration, reps, equipment, block_id, order")
+          .in("block_id", blockIds)
+          .order("order", { ascending: true });
 
         if (exerciseError || !exerciseData) {
           console.log("❌ Error al cargar ejercicios:", exerciseError?.message || "No data");
@@ -109,8 +119,22 @@ export default function EditRoutineScreen() {
 
         console.log("✅ Ejercicios cargados:", exerciseData);
         const blocksWithExercises: Block[] = blockData.map((block) => ({
-          ...block,
-          exercises: exerciseData.filter((ex) => ex.block_id === block.id),
+          id: block.id,
+          title: block.title,
+          order: block.order,
+          repeat: block.repeat.toString(),
+          is_preparation: block.is_preparation || false,
+          exercises: exerciseData
+            .filter((ex) => ex.block_id === block.id)
+            .map((ex) => ({
+              id: ex.id,
+              name: ex.name,
+              order: ex.order,
+              duration: ex.duration,
+              reps: ex.reps,
+              equipment: ex.equipment || "",
+              block_id: ex.block_id,
+            })),
         }));
 
         setBlocks(blocksWithExercises);
@@ -127,21 +151,82 @@ export default function EditRoutineScreen() {
     fetchData();
   }, [id]);
 
-  // Función para actualizar un bloque específico
+  // Función para actualizar un bloque
   const updateBlock = (index: number, changes: Partial<Block>) => {
     setBlocks((prev) => {
       const copy = [...prev];
       copy[index] = { ...copy[index], ...changes };
+      // Si es bloque de preparación, fijar título y ajustar ejercicios
+      if (changes.is_preparation) {
+        copy[index].title = "Preparación";
+        copy[index].exercises = [
+          {
+            id: copy[index].exercises[0]?.id || uuidv4(),
+            name: copy[index].exercises[0]?.name || "Preparación",
+            order: 1,
+            duration: copy[index].exercises[0]?.duration,
+            equipment: copy[index].exercises[0]?.equipment || "",
+          },
+        ];
+        copy[index].repeat = "1"; // Bloques de preparación tienen 1 repetición
+      }
       return copy;
     });
   };
 
   // Función para eliminar un bloque
   const removeBlock = (index: number) => {
-    setBlocks((prev) => prev.filter((_, i) => i !== index));
+    setBlocks((prev) => prev.filter((_, i) => i !== index).map((block, i) => ({ ...block, order: i + 1 })));
   };
 
-  // Función para actualizar un ejercicio dentro de un bloque
+  // Función para agregar un nuevo bloque
+  const addBlock = () => {
+    setBlocks((prev) => [
+      ...prev,
+      {
+        id: uuidv4(),
+        title: "",
+        order: prev.length + 1,
+        repeat: "1",
+        is_preparation: false,
+        exercises: [{ id: uuidv4(), name: "", order: 1, duration: undefined, reps: undefined, equipment: "" }],
+      },
+    ]);
+  };
+
+  // Función para agregar un ejercicio a un bloque
+  const addExercise = (blockIndex: number) => {
+    setBlocks((prev) => {
+      const copy = [...prev];
+      const block = copy[blockIndex];
+      if (block.is_preparation) return copy; // No permitir más ejercicios en bloques de preparación
+      const exercises = block.exercises;
+      exercises.push({
+        id: uuidv4(),
+        name: "",
+        order: exercises.length + 1,
+        duration: undefined,
+        reps: undefined,
+        equipment: "",
+      });
+      return copy;
+    });
+  };
+
+  // Función para eliminar un ejercicio
+  const removeExercise = (blockIndex: number, exIndex: number) => {
+    setBlocks((prev) => {
+      const copy = [...prev];
+      const block = copy[blockIndex];
+      if (block.is_preparation) return copy; // No permitir eliminar el ejercicio de preparación
+      copy[blockIndex].exercises = copy[blockIndex].exercises
+        .filter((_, i) => i !== exIndex)
+        .map((ex, i) => ({ ...ex, order: i + 1 }));
+      return copy;
+    });
+  };
+
+  // Función para actualizar un ejercicio
   const updateExercise = (blockIndex: number, exIndex: number, changes: Partial<Exercise>) => {
     setBlocks((prev) => {
       const copy = [...prev];
@@ -153,44 +238,7 @@ export default function EditRoutineScreen() {
     });
   };
 
-  // Función para agregar un nuevo bloque
-  const addBlock = () => {
-    setBlocks((prev) => [
-      ...prev,
-      {
-        id: uuidv4(),
-        title: "",
-        repeat: 1,
-        exercises: [{ id: uuidv4(), name: "", duration: undefined, reps: undefined, equipment: "" }],
-      },
-    ]);
-  };
-
-  // Función para agregar un nuevo ejercicio a un bloque
-  const addExercise = (blockIndex: number) => {
-    setBlocks((prev) => {
-      const copy = [...prev];
-      copy[blockIndex].exercises.push({
-        id: uuidv4(),
-        name: "",
-        duration: undefined,
-        reps: undefined,
-        equipment: "",
-      });
-      return copy;
-    });
-  };
-
-  // Función para eliminar un ejercicio de un bloque
-  const removeExercise = (blockIndex: number, exIndex: number) => {
-    setBlocks((prev) => {
-      const copy = [...prev];
-      copy[blockIndex].exercises = copy[blockIndex].exercises.filter((_, i) => i !== exIndex);
-      return copy;
-    });
-  };
-
-  // Función para validar los datos antes de guardar
+  // Función para validar los datos
   const validate = (): boolean => {
     console.log("🔍 Iniciando validación de datos...");
     if (!routineName.trim()) {
@@ -223,7 +271,7 @@ export default function EditRoutineScreen() {
         Alert.alert("Error", "Todos los bloques deben tener un título.");
         return false;
       }
-      if (block.repeat < 1) {
+      if (!block.repeat || isNaN(Number(block.repeat)) || Number(block.repeat) < 1) {
         console.log("❌ Validación fallida: Repeticiones de bloque no válidas");
         Alert.alert("Error", `El bloque "${block.title}" debe repetirse al menos una vez.`);
         return false;
@@ -239,19 +287,18 @@ export default function EditRoutineScreen() {
           Alert.alert("Error", "Todos los ejercicios deben tener un nombre.");
           return false;
         }
-        if (!ex.duration && !ex.reps) {
+        if (block.is_preparation) {
+          if (!ex.duration) {
+            console.log("❌ Validación fallida: Título de preparación sin duración");
+            Alert.alert(
+              "Error",
+              `El título "${ex.name}" en el bloque de preparación debe tener una duración.`
+            );
+            return false;
+          }
+        } else if (!ex.duration && !ex.reps) {
           console.log("❌ Validación fallida: Ejercicio sin duración ni repeticiones");
           Alert.alert("Error", `El ejercicio "${ex.name}" debe tener duración o repeticiones.`);
-          return false;
-        }
-        if (ex.duration && isNaN(ex.duration)) {
-          console.log("❌ Validación fallida: Duración de ejercicio no válida");
-          Alert.alert("Error", `La duración del ejercicio "${ex.name}" debe ser un número válido.`);
-          return false;
-        }
-        if (ex.reps && isNaN(ex.reps)) {
-          console.log("❌ Validación fallida: Repeticiones de ejercicio no válidas");
-          Alert.alert("Error", `Las repeticiones del ejercicio "${ex.name}" deben ser un número válido.`);
           return false;
         }
       }
@@ -261,7 +308,7 @@ export default function EditRoutineScreen() {
     return true;
   };
 
-  // Función para guardar los cambios en la rutina
+  // Función para guardar los cambios
   const handleSave = async () => {
     console.log("🧨 handleSave iniciado");
     if (!validate() || !id) {
@@ -297,7 +344,9 @@ export default function EditRoutineScreen() {
           id: block.id,
           routine_id: id,
           title: block.title,
-          repeat: block.repeat,
+          order: block.order,
+          repeat: parseInt(block.repeat) || 1,
+          is_preparation: block.is_preparation || false,
         });
 
         if (blockError) {
@@ -305,10 +354,11 @@ export default function EditRoutineScreen() {
           throw new Error(`Error al guardar el bloque: ${blockError.message}`);
         }
 
-        const formattedExercises = block.exercises.map((ex) => ({
+        const formattedExercises = block.exercises.map((ex, index) => ({
           id: ex.id,
           block_id: block.id,
           name: ex.name,
+          order: index + 1,
           duration: ex.duration || null,
           reps: ex.reps || null,
           equipment: ex.equipment || null,
@@ -349,7 +399,7 @@ export default function EditRoutineScreen() {
     }
   };
 
-  // Mostrar pantalla de carga mientras se obtienen los datos
+  // Mostrar pantalla de carga
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -358,13 +408,12 @@ export default function EditRoutineScreen() {
     );
   }
 
-  // Renderizado principal de la pantalla
+  // Renderizado principal
   return (
     <ScrollView contentContainerStyle={styles.container}>
       <Text style={styles.title}>Editar Rutina</Text>
       {error && <Text style={styles.error}>{error}</Text>}
 
-      {/* Campo para el nombre de la rutina */}
       <Text style={styles.label}>Nombre *</Text>
       <TextInput
         style={styles.input}
@@ -373,7 +422,6 @@ export default function EditRoutineScreen() {
         onChangeText={setRoutineName}
       />
 
-      {/* Campo para el estilo de la rutina */}
       <Text style={styles.label}>Estilo</Text>
       <TextInput
         style={styles.input}
@@ -382,7 +430,6 @@ export default function EditRoutineScreen() {
         onChangeText={setStyle}
       />
 
-      {/* Campo para el nivel de la rutina */}
       <Text style={styles.label}>Nivel</Text>
       <TextInput
         style={styles.input}
@@ -391,37 +438,34 @@ export default function EditRoutineScreen() {
         onChangeText={setLevel}
       />
 
-      {/* Campo para la duración de la rutina */}
       <Text style={styles.label}>Duración (minutos)</Text>
       <TextInput
         style={styles.input}
         placeholder="Duración total estimada"
         keyboardType="numeric"
         value={duration}
-        onChangeText={setDuration}
+        onChangeText={(text) => setDuration(restrictToNumbers(text))}
       />
 
-      {/* Campo para el descanso entre ejercicios */}
       <Text style={styles.label}>Descanso entre ejercicios (segundos)</Text>
       <TextInput
         style={styles.input}
         placeholder="Ej: 20"
         keyboardType="numeric"
         value={restBetweenExercises}
-        onChangeText={setRestBetweenExercises}
+        onChangeText={(text) => setRestBetweenExercises(restrictToNumbers(text))}
       />
 
-      {/* Campo para el descanso entre bloques */}
       <Text style={styles.label}>Descanso entre bloques (segundos)</Text>
       <TextInput
         style={styles.input}
         placeholder="Ej: 60"
         keyboardType="numeric"
         value={restBetweenBlocks}
-        onChangeText={setRestBetweenBlocks}
+        onChangeText={(text) => setRestBetweenBlocks(restrictToNumbers(text))}
       />
 
-      {/* Renderizado dinámico de los bloques */}
+      {/* Bloques dinámicos */}
       {blocks.map((block, blockIndex) => (
         <View key={block.id} style={styles.blockContainer}>
           <View style={styles.blockHeader}>
@@ -433,33 +477,58 @@ export default function EditRoutineScreen() {
             )}
           </View>
 
-          {/* Campo para el título del bloque */}
+          {/* Switch para marcar como preparación */}
+          <View style={styles.switchContainer}>
+            <Text style={styles.label}>¿Es bloque de preparación?</Text>
+            <Switch
+              value={block.is_preparation}
+              onValueChange={(value) => {
+                updateBlock(blockIndex, {
+                  is_preparation: value,
+                  title: value ? "Preparación" : "",
+                  repeat: value ? "1" : block.repeat,
+                  exercises: value
+                    ? [
+                        {
+                          id: block.exercises[0]?.id || uuidv4(),
+                          name: block.exercises[0]?.name || "Preparación",
+                          order: 1,
+                          duration: block.exercises[0]?.duration,
+                          equipment: block.exercises[0]?.equipment || "",
+                        },
+                      ]
+                    : block.exercises,
+                });
+              }}
+            />
+          </View>
+
+          <Text style={styles.label}>Título</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, block.is_preparation && styles.disabledInput]}
             placeholder="Título del bloque"
             value={block.title}
             onChangeText={(text) => updateBlock(blockIndex, { title: text })}
+            editable={!block.is_preparation} // Bloquear edición si es preparación
           />
 
-          {/* Campo para las repeticiones del bloque */}
           <Text style={styles.label}>Repeticiones</Text>
           <TextInput
-            style={styles.input}
-            placeholder="Repeticiones"
+            style={[styles.input, block.is_preparation && styles.disabledInput]}
+            placeholder="Ej: 1"
             keyboardType="numeric"
-            value={block.repeat.toString()}
-            onChangeText={(text) => {
-              const val = parseInt(text) || 1;
-              updateBlock(blockIndex, { repeat: val });
-            }}
+            value={block.repeat}
+            onChangeText={(text) => updateBlock(blockIndex, { repeat: restrictToNumbers(text) })}
+            editable={!block.is_preparation} // Bloquear para bloques de preparación
           />
 
-          {/* Renderizado dinámico de los ejercicios del bloque */}
           {block.exercises.map((ex, exIndex) => (
             <View key={ex.id} style={styles.exerciseContainer}>
               <View style={styles.exerciseHeader}>
-                <Text style={styles.exerciseTitle}>Ejercicio {exIndex + 1}</Text>
-                {block.exercises.length > 1 && (
+                <Text style={styles.exerciseTitle}>
+                  {block.is_preparation ? "Título" : `Ejercicio ${exIndex + 1}`}
+                </Text>
+                {!block.is_preparation && block.exercises.length > 1 && (
                   <Pressable
                     onPress={() => removeExercise(blockIndex, exIndex)}
                     style={styles.removeButton}
@@ -469,15 +538,13 @@ export default function EditRoutineScreen() {
                 )}
               </View>
 
-              {/* Campo para el nombre del ejercicio */}
               <TextInput
                 style={styles.input}
-                placeholder="Nombre del ejercicio"
+                placeholder={block.is_preparation ? "Preparen los elementos" : "Nombre del ejercicio"}
                 value={ex.name}
                 onChangeText={(text) => updateExercise(blockIndex, exIndex, { name: text })}
               />
 
-              {/* Campo para la duración del ejercicio */}
               <Text style={styles.label}>Duración (segundos)</Text>
               <TextInput
                 style={styles.input}
@@ -485,25 +552,31 @@ export default function EditRoutineScreen() {
                 keyboardType="numeric"
                 value={ex.duration?.toString() || ""}
                 onChangeText={(text) => {
-                  const val = parseInt(text);
-                  updateExercise(blockIndex, exIndex, { duration: isNaN(val) ? undefined : val });
+                  const val = parseInt(restrictToNumbers(text));
+                  updateExercise(blockIndex, exIndex, {
+                    duration: isNaN(val) ? undefined : val,
+                  });
                 }}
               />
 
-              {/* Campo para las repeticiones del ejercicio */}
-              <Text style={styles.label}>Repeticiones</Text>
-              <TextInput
-                style={styles.input}
-                placeholder="Ej: 15"
-                keyboardType="numeric"
-                value={ex.reps?.toString() || ""}
-                onChangeText={(text) => {
-                  const val = parseInt(text);
-                  updateExercise(blockIndex, exIndex, { reps: isNaN(val) ? undefined : val });
-                }}
-              />
+              {!block.is_preparation && (
+                <>
+                  <Text style={styles.label}>Repeticiones</Text>
+                  <TextInput
+                    style={styles.input}
+                    placeholder="Ej: 15"
+                    keyboardType="numeric"
+                    value={ex.reps?.toString() || ""}
+                    onChangeText={(text) => {
+                      const val = parseInt(restrictToNumbers(text));
+                      updateExercise(blockIndex, exIndex, {
+                        reps: isNaN(val) ? undefined : val,
+                      });
+                    }}
+                  />
+                </>
+              )}
 
-              {/* Campo para el equipo del ejercicio */}
               <Text style={styles.label}>Equipo</Text>
               <TextInput
                 style={styles.input}
@@ -514,27 +587,18 @@ export default function EditRoutineScreen() {
             </View>
           ))}
 
-          {/* Botón para agregar un ejercicio al bloque */}
-          <Pressable style={styles.addButton} onPress={() => addExercise(blockIndex)}>
-            <Text style={styles.addButtonText}>+ Agregar ejercicio</Text>
-          </Pressable>
+          {!block.is_preparation && (
+            <Pressable style={styles.addButton} onPress={() => addExercise(blockIndex)}>
+              <Text style={styles.addButtonText}>+ Agregar ejercicio</Text>
+            </Pressable>
+          )}
         </View>
       ))}
 
-      {/* Botón para agregar un nuevo bloque */}
       <Pressable style={styles.addButton} onPress={addBlock}>
         <Text style={styles.addButtonText}>+ Agregar bloque</Text>
       </Pressable>
 
-      {/* Botón para probar la navegación */}
-      <Pressable style={styles.addButton} onPress={() => {
-        console.log("🧪 Probando navegación manual a /");
-        router.replace("/");
-      }}>
-        <Text style={styles.addButtonText}>Volver al inicio (prueba)</Text>
-      </Pressable>
-
-      {/* Botón para guardar los cambios */}
       <Pressable
         style={[styles.submitButton, loading && styles.disabledButton]}
         onPress={handleSave}
@@ -589,6 +653,10 @@ const styles = StyleSheet.create({
     padding: 10,
     marginTop: 6,
     backgroundColor: "#fff",
+  },
+  disabledInput: {
+    backgroundColor: "#e5e7eb",
+    color: "#444",
   },
   blockContainer: {
     marginTop: 24,
@@ -658,5 +726,11 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     backgroundColor: "#93c5fd",
+  },
+  switchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 12,
   },
 });
