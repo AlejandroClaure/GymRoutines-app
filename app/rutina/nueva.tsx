@@ -25,7 +25,7 @@ type Exercise = {
 type Block = {
   title: string;
   order: number;
-  repeat: number;
+  repeat: string; // ← ahora es string para permitir borrar
   exercises: Exercise[];
 };
 
@@ -44,7 +44,7 @@ export default function NuevaRutinaScreen() {
     {
       title: "",
       order: 1,
-      repeat: 1,
+      repeat: "1",
       exercises: [
         { name: "", order: 1, duration: undefined, reps: undefined, equipment: "" },
       ],
@@ -67,7 +67,7 @@ export default function NuevaRutinaScreen() {
       {
         title: "",
         order: prev.length + 1,
-        repeat: 1,
+        repeat: "1",
         exercises: [{ name: "", order: 1, duration: undefined, reps: undefined, equipment: "" }],
       },
     ]);
@@ -104,7 +104,6 @@ export default function NuevaRutinaScreen() {
     setBlocks((prev) => {
       const copy = [...prev];
       copy[blockIndex].exercises = copy[blockIndex].exercises.filter((_, i) => i !== exerciseIndex);
-      // reordenar orders de ejercicios
       copy[blockIndex].exercises = copy[blockIndex].exercises.map((ex, i) => ({ ...ex, order: i + 1 }));
       return copy;
     });
@@ -131,7 +130,6 @@ export default function NuevaRutinaScreen() {
       return;
     }
 
-    // Validar bloques y ejercicios mínimos
     for (const block of blocks) {
       if (!block.title.trim()) {
         Alert.alert("Error", "Cada bloque debe tener un título.");
@@ -141,12 +139,15 @@ export default function NuevaRutinaScreen() {
         Alert.alert("Error", `El bloque "${block.title}" debe tener al menos un ejercicio.`);
         return;
       }
+      if (!block.repeat || isNaN(Number(block.repeat)) || Number(block.repeat) < 1) {
+        Alert.alert("Error", `El bloque "${block.title}" debe tener al menos 1 repetición.`);
+        return;
+      }
       for (const ex of block.exercises) {
         if (!ex.name.trim()) {
           Alert.alert("Error", "Cada ejercicio debe tener un nombre.");
           return;
         }
-        // Opcional: validar duración o rep mínimo uno
         if (!ex.duration && !ex.reps) {
           Alert.alert(
             "Error",
@@ -164,12 +165,12 @@ export default function NuevaRutinaScreen() {
       style: style.trim() || undefined,
       level: level.trim() || undefined,
       duration: duration ? parseInt(duration, 10) : undefined,
-      rest_between_exercises: restBetweenExercises ? parseInt(restBetweenExercises, 10) : 20,
-      rest_between_blocks: restBetweenBlocks ? parseInt(restBetweenBlocks, 10) : 60,
-      blocks: blocks.map((block) => ({
+      rest_between_exercises: parseInt(restBetweenExercises, 10) || 20,
+      rest_between_blocks: parseInt(restBetweenBlocks, 10) || 60,
+      blocks: blocks.map((block, index) => ({
         title: block.title,
-        order: block.order,
-        repeat: block.repeat,
+        order: index + 1,
+        repeat: parseInt(block.repeat, 10) || 1,
         exercises: block.exercises.map((ex) => ({
           name: ex.name,
           order: ex.order,
@@ -184,7 +185,7 @@ export default function NuevaRutinaScreen() {
       const result = await createRoutineWithBlocks(session.user.id, routineToCreate);
       if (result) {
         Alert.alert("Éxito", "Rutina creada correctamente");
-        router.replace("/"); // Volver al home
+        router.replace("/");
       } else {
         Alert.alert("Error", "No se pudo crear la rutina.");
       }
@@ -236,7 +237,6 @@ export default function NuevaRutinaScreen() {
       <Text style={styles.label}>Descanso entre ejercicios (segundos)</Text>
       <TextInput
         style={styles.input}
-        placeholder="Ej: 20"
         keyboardType="numeric"
         value={restBetweenExercises}
         onChangeText={setRestBetweenExercises}
@@ -245,7 +245,6 @@ export default function NuevaRutinaScreen() {
       <Text style={styles.label}>Descanso entre bloques (segundos)</Text>
       <TextInput
         style={styles.input}
-        placeholder="Ej: 60"
         keyboardType="numeric"
         value={restBetweenBlocks}
         onChangeText={setRestBetweenBlocks}
@@ -274,14 +273,11 @@ export default function NuevaRutinaScreen() {
           <TextInput
             style={styles.input}
             keyboardType="numeric"
-            value={block.repeat.toString()}
-            onChangeText={(text) => {
-              const val = parseInt(text, 10);
-              if (!isNaN(val) && val > 0) updateBlock(blockIndex, { repeat: val });
-            }}
+            placeholder="Ej: 1"
+            value={block.repeat}
+            onChangeText={(text) => updateBlock(blockIndex, { repeat: text })}
           />
 
-          {/* Ejercicios del bloque */}
           {block.exercises.map((exercise, exIndex) => (
             <View key={exIndex} style={styles.exerciseContainer}>
               <View style={styles.exerciseHeader}>
@@ -311,7 +307,9 @@ export default function NuevaRutinaScreen() {
                 value={exercise.duration?.toString() || ""}
                 onChangeText={(text) => {
                   const val = parseInt(text, 10);
-                  updateExercise(blockIndex, exIndex, { duration: isNaN(val) ? undefined : val });
+                  updateExercise(blockIndex, exIndex, {
+                    duration: isNaN(val) ? undefined : val,
+                  });
                 }}
               />
 
@@ -323,7 +321,9 @@ export default function NuevaRutinaScreen() {
                 value={exercise.reps?.toString() || ""}
                 onChangeText={(text) => {
                   const val = parseInt(text, 10);
-                  updateExercise(blockIndex, exIndex, { reps: isNaN(val) ? undefined : val });
+                  updateExercise(blockIndex, exIndex, {
+                    reps: isNaN(val) ? undefined : val,
+                  });
                 }}
               />
 

@@ -13,7 +13,7 @@ export const rutinaFuncionalAlternativa: Routine = {
       title: "Preparación",
       repeat: 1,
       exercises: [
-        { name: "¿Están listos?", duration: 10, equipment: "Preparen las nalgas" }
+        { name: "¿Están listos?", duration: 10, equipment: "Preparen los elementos" }
       ],
     },
     {
