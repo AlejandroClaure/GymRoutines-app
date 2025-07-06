@@ -1,3 +1,5 @@
+// app/rutina/nueva.tsx
+
 import React, { useState } from "react";
 import {
   View,
@@ -8,51 +10,59 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  Switch,
 } from "react-native";
 import { useRouter } from "expo-router";
-
 import { useAuth } from "@/context/AuthContext";
 import { createRoutineWithBlocks } from "@/lib/supabaseService";
 
+// Definición de tipos para ejercicios
 type Exercise = {
-  name: string;
-  order: number;
-  duration?: number;
-  reps?: number;
-  equipment?: string;
+  name: string; // Nombre del ejercicio (o título en bloques de preparación)
+  order: number; // Orden dentro del bloque
+  duration?: number; // Duración en segundos
+  reps?: number; // Cantidad de repeticiones
+  equipment?: string; // Equipamiento necesario
 };
 
+// Definición de tipos para bloques
 type Block = {
-  title: string;
-  order: number;
-  repeat: string; // ← ahora es string para permitir borrar
-  exercises: Exercise[];
+  title: string; // Título del bloque
+  order: number; // Orden dentro de la rutina
+  repeat: string; // Cantidad de repeticiones (como string para el input)
+  is_preparation?: boolean; // Indica si es bloque de preparación
+  exercises: Exercise[]; // Lista de ejercicios
 };
 
+// Componente principal para crear una nueva rutina
 export default function NuevaRutinaScreen() {
   const router = useRouter();
   const { session } = useAuth();
 
+  // Estados para los campos de la rutina
   const [name, setName] = useState("");
   const [style, setStyle] = useState("");
   const [level, setLevel] = useState("");
   const [duration, setDuration] = useState("");
-  const [restBetweenExercises, setRestBetweenExercises] = useState("20");
-  const [restBetweenBlocks, setRestBetweenBlocks] = useState("60");
-
+  const [restBetweenExercises, setRestBetweenExercises] = useState("5"); // Default: 5 segundos
+  const [restBetweenBlocks, setRestBetweenBlocks] = useState("5"); // Default: 5 segundos
   const [blocks, setBlocks] = useState<Block[]>([
     {
       title: "",
       order: 1,
       repeat: "1",
-      exercises: [
-        { name: "", order: 1, duration: undefined, reps: undefined, equipment: "" },
-      ],
+      is_preparation: false,
+      exercises: [{ name: "", order: 1, duration: undefined, reps: undefined, equipment: "" }],
     },
   ]);
-
   const [loading, setLoading] = useState(false);
 
+  // Función para restringir input a solo números
+  const restrictToNumbers = (text: string) => {
+    return text.replace(/[^0-9]/g, ""); // Elimina todo lo que no sea dígito
+  };
+
+  // Verifica si el usuario está autenticado
   if (!session) {
     return (
       <View style={styles.centered}>
@@ -61,6 +71,7 @@ export default function NuevaRutinaScreen() {
     );
   }
 
+  // Función para agregar un nuevo bloque
   const addBlock = () => {
     setBlocks((prev) => [
       ...prev,
@@ -68,27 +79,46 @@ export default function NuevaRutinaScreen() {
         title: "",
         order: prev.length + 1,
         repeat: "1",
+        is_preparation: false,
         exercises: [{ name: "", order: 1, duration: undefined, reps: undefined, equipment: "" }],
       },
     ]);
   };
 
+  // Función para eliminar un bloque
   const removeBlock = (index: number) => {
-    setBlocks((prev) => prev.filter((_, i) => i !== index));
+    setBlocks((prev) => prev.filter((_, i) => i !== index).map((block, i) => ({ ...block, order: i + 1 })));
   };
 
+  // Función para actualizar un bloque
   const updateBlock = (index: number, block: Partial<Block>) => {
     setBlocks((prev) => {
       const copy = [...prev];
       copy[index] = { ...copy[index], ...block };
+      // Si es bloque de preparación, fijar título y ajustar el ejercicio
+      if (block.is_preparation) {
+        copy[index].title = "Preparación";
+        copy[index].exercises = [
+          {
+            name: copy[index].exercises[0]?.name || "Preparación",
+            order: 1,
+            duration: copy[index].exercises[0]?.duration,
+            equipment: copy[index].exercises[0]?.equipment || "",
+          },
+        ];
+        copy[index].repeat = "1"; // Bloques de preparación tienen 1 repetición
+      }
       return copy;
     });
   };
 
+  // Función para agregar un ejercicio a un bloque
   const addExercise = (blockIndex: number) => {
     setBlocks((prev) => {
       const copy = [...prev];
-      const exercises = copy[blockIndex].exercises;
+      const block = copy[blockIndex];
+      if (block.is_preparation) return copy; // No permitir más ejercicios en bloques de preparación
+      const exercises = block.exercises;
       exercises.push({
         name: "",
         order: exercises.length + 1,
@@ -100,15 +130,20 @@ export default function NuevaRutinaScreen() {
     });
   };
 
+  // Función para eliminar un ejercicio
   const removeExercise = (blockIndex: number, exerciseIndex: number) => {
     setBlocks((prev) => {
       const copy = [...prev];
-      copy[blockIndex].exercises = copy[blockIndex].exercises.filter((_, i) => i !== exerciseIndex);
-      copy[blockIndex].exercises = copy[blockIndex].exercises.map((ex, i) => ({ ...ex, order: i + 1 }));
+      const block = copy[blockIndex];
+      if (block.is_preparation) return copy; // No permitir eliminar el ejercicio de preparación
+      copy[blockIndex].exercises = copy[blockIndex].exercises
+        .filter((_, i) => i !== exerciseIndex)
+        .map((ex, i) => ({ ...ex, order: i + 1 }));
       return copy;
     });
   };
 
+  // Función para actualizar un ejercicio
   const updateExercise = (
     blockIndex: number,
     exerciseIndex: number,
@@ -124,6 +159,7 @@ export default function NuevaRutinaScreen() {
     });
   };
 
+  // Función para manejar el envío del formulario
   const handleSubmit = async () => {
     if (!name.trim()) {
       Alert.alert("Error", "Debes ingresar un nombre para la rutina.");
@@ -148,7 +184,15 @@ export default function NuevaRutinaScreen() {
           Alert.alert("Error", "Cada ejercicio debe tener un nombre.");
           return;
         }
-        if (!ex.duration && !ex.reps) {
+        if (block.is_preparation) {
+          if (!ex.duration) {
+            Alert.alert(
+              "Error",
+              `El título "${ex.name}" en el bloque de preparación debe tener una duración.`
+            );
+            return;
+          }
+        } else if (!ex.duration && !ex.reps) {
           Alert.alert(
             "Error",
             `El ejercicio "${ex.name}" debe tener duración o repeticiones definidas.`
@@ -160,17 +204,19 @@ export default function NuevaRutinaScreen() {
 
     setLoading(true);
 
+    // Preparar datos para enviar a Supabase
     const routineToCreate = {
       name,
       style: style.trim() || undefined,
       level: level.trim() || undefined,
       duration: duration ? parseInt(duration, 10) : undefined,
-      rest_between_exercises: parseInt(restBetweenExercises, 10) || 20,
-      rest_between_blocks: parseInt(restBetweenBlocks, 10) || 60,
+      rest_between_exercises: parseInt(restBetweenExercises, 10) || 5,
+      rest_between_blocks: parseInt(restBetweenBlocks, 10) || 5,
       blocks: blocks.map((block, index) => ({
         title: block.title,
         order: index + 1,
         repeat: parseInt(block.repeat, 10) || 1,
+        is_preparation: block.is_preparation,
         exercises: block.exercises.map((ex) => ({
           name: ex.name,
           order: ex.order,
@@ -231,7 +277,7 @@ export default function NuevaRutinaScreen() {
         placeholder="Duración total estimada"
         keyboardType="numeric"
         value={duration}
-        onChangeText={setDuration}
+        onChangeText={(text) => setDuration(restrictToNumbers(text))}
       />
 
       <Text style={styles.label}>Descanso entre ejercicios (segundos)</Text>
@@ -239,7 +285,7 @@ export default function NuevaRutinaScreen() {
         style={styles.input}
         keyboardType="numeric"
         value={restBetweenExercises}
-        onChangeText={setRestBetweenExercises}
+        onChangeText={(text) => setRestBetweenExercises(restrictToNumbers(text))}
       />
 
       <Text style={styles.label}>Descanso entre bloques (segundos)</Text>
@@ -247,7 +293,7 @@ export default function NuevaRutinaScreen() {
         style={styles.input}
         keyboardType="numeric"
         value={restBetweenBlocks}
-        onChangeText={setRestBetweenBlocks}
+        onChangeText={(text) => setRestBetweenBlocks(restrictToNumbers(text))}
       />
 
       {/* Bloques dinámicos */}
@@ -262,27 +308,50 @@ export default function NuevaRutinaScreen() {
             )}
           </View>
 
+          {/* Switch para marcar como preparación */}
+          <View style={styles.switchContainer}>
+            <Text style={styles.label}>¿Es bloque de preparación?</Text>
+            <Switch
+              value={block.is_preparation}
+              onValueChange={(value) => {
+                updateBlock(blockIndex, {
+                  is_preparation: value,
+                  title: value ? "Preparación" : "",
+                  repeat: value ? "1" : block.repeat,
+                  exercises: value
+                    ? [{ name: "preparen los elemntos", order: 1, duration: undefined, equipment: "" }]
+                    : block.exercises,
+                });
+              }}
+            />
+          </View>
+
+          <Text style={styles.label}>Título</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, block.is_preparation && styles.disabledInput]}
             placeholder="Título del bloque"
             value={block.title}
             onChangeText={(text) => updateBlock(blockIndex, { title: text })}
+            editable={!block.is_preparation} // Bloquear edición si es preparación
           />
 
           <Text style={styles.label}>Repeticiones</Text>
           <TextInput
-            style={styles.input}
+            style={[styles.input, block.is_preparation && styles.disabledInput]}
             keyboardType="numeric"
             placeholder="Ej: 1"
             value={block.repeat}
-            onChangeText={(text) => updateBlock(blockIndex, { repeat: text })}
+            onChangeText={(text) => updateBlock(blockIndex, { repeat: restrictToNumbers(text) })}
+            editable={!block.is_preparation} // Bloquear para bloques de preparación
           />
 
           {block.exercises.map((exercise, exIndex) => (
             <View key={exIndex} style={styles.exerciseContainer}>
               <View style={styles.exerciseHeader}>
-                <Text style={styles.exerciseTitle}>Ejercicio {exIndex + 1}</Text>
-                {block.exercises.length > 1 && (
+                <Text style={styles.exerciseTitle}>
+                  {block.is_preparation ? "Título" : `Ejercicio ${exIndex + 1}`}
+                </Text>
+                {!block.is_preparation && block.exercises.length > 1 && (
                   <Pressable
                     onPress={() => removeExercise(blockIndex, exIndex)}
                     style={styles.removeButton}
@@ -294,7 +363,7 @@ export default function NuevaRutinaScreen() {
 
               <TextInput
                 style={styles.input}
-                placeholder="Nombre del ejercicio"
+                placeholder={block.is_preparation ? "Preparen los elementos" : "Nombre del ejercicio"}
                 value={exercise.name}
                 onChangeText={(text) => updateExercise(blockIndex, exIndex, { name: text })}
               />
@@ -306,26 +375,30 @@ export default function NuevaRutinaScreen() {
                 placeholder="Ej: 30"
                 value={exercise.duration?.toString() || ""}
                 onChangeText={(text) => {
-                  const val = parseInt(text, 10);
+                  const val = parseInt(restrictToNumbers(text), 10);
                   updateExercise(blockIndex, exIndex, {
                     duration: isNaN(val) ? undefined : val,
                   });
                 }}
               />
 
-              <Text style={styles.label}>Repeticiones</Text>
-              <TextInput
-                style={styles.input}
-                keyboardType="numeric"
-                placeholder="Ej: 15"
-                value={exercise.reps?.toString() || ""}
-                onChangeText={(text) => {
-                  const val = parseInt(text, 10);
-                  updateExercise(blockIndex, exIndex, {
-                    reps: isNaN(val) ? undefined : val,
-                  });
-                }}
-              />
+              {!block.is_preparation && (
+                <>
+                  <Text style={styles.label}>Repeticiones</Text>
+                  <TextInput
+                    style={styles.input}
+                    keyboardType="numeric"
+                    placeholder="Ej: 15"
+                    value={exercise.reps?.toString() || ""}
+                    onChangeText={(text) => {
+                      const val = parseInt(restrictToNumbers(text), 10);
+                      updateExercise(blockIndex, exIndex, {
+                        reps: isNaN(val) ? undefined : val,
+                      });
+                    }}
+                  />
+                </>
+              )}
 
               <Text style={styles.label}>Equipo</Text>
               <TextInput
@@ -337,9 +410,11 @@ export default function NuevaRutinaScreen() {
             </View>
           ))}
 
-          <Pressable onPress={() => addExercise(blockIndex)} style={styles.addButton}>
-            <Text style={styles.addButtonText}>+ Agregar ejercicio</Text>
-          </Pressable>
+          {!block.is_preparation && (
+            <Pressable onPress={() => addExercise(blockIndex)} style={styles.addButton}>
+              <Text style={styles.addButtonText}>+ Agregar ejercicio</Text>
+            </Pressable>
+          )}
         </View>
       ))}
 
@@ -358,6 +433,7 @@ export default function NuevaRutinaScreen() {
   );
 }
 
+// Estilos para el componente
 const styles = StyleSheet.create({
   container: {
     padding: 16,
@@ -382,6 +458,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     padding: 8,
     marginTop: 6,
+  },
+  disabledInput: {
+    backgroundColor: "#e5e7eb",
+    color: "#444",
   },
   blockContainer: {
     marginTop: 24,
@@ -451,5 +531,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  switchContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 12,
   },
 });
