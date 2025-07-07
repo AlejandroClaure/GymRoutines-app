@@ -1,3 +1,5 @@
+// app/index.tsx
+
 import { View, Text, FlatList, Pressable, StyleSheet, ActivityIndicator, Platform, Alert } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useEffect, useState, useCallback } from "react";
@@ -13,13 +15,9 @@ type CombinedRoutine = RoutineSummary & {
 };
 
 export default function HomeScreen() {
-  // Hook para manejar la navegación
   const router = useRouter();
-  // Obtener la sesión del contexto de autenticación
   const { session } = useAuth();
-  // Estado para indicar si está cargando
   const [loading, setLoading] = useState(true);
-  // Estado para almacenar las rutinas
   const [routines, setRoutines] = useState<CombinedRoutine[]>([]);
 
   // Función para cargar las rutinas
@@ -27,17 +25,31 @@ export default function HomeScreen() {
     setLoading(true);
     try {
       // Cargar rutinas locales desde el registro
-      const localRoutines: CombinedRoutine[] = Object.values(routineRegistry).map((r) => ({
-        id: r.id,
-        name: r.name,
-        level: r.level as "Principante" | "Intermedio" | "Avanzado",
-        duration: r.duration,
-        style: r.style ?? "General",
-        source: "local",
-      }));
+      const localRoutines: CombinedRoutine[] = Object.entries(routineRegistry)
+        .map(([key, r]) => {
+          const validLevel = ["Principiante", "Intermedio", "Avanzado"].includes(r.level ?? "")
+            ? r.level
+            : "Principiante";
+          return {
+            id: r.id ?? key, // Usar la clave del registro si id no está definido
+            name: r.name,
+            level: validLevel as "Principiante" | "Intermedio" | "Avanzado" | undefined,
+            duration: r.duration,
+            style: r.style,
+            source: "local" as const,
+          };
+        })
+        .filter((r) => !!r.id); // Filtrar sin predicado de tipo
+
+      if (localRoutines.length < Object.keys(routineRegistry).length) {
+        console.warn("⚠️ Algunas rutinas locales fueron filtradas por tener id undefined:", {
+          filteredCount: Object.keys(routineRegistry).length - localRoutines.length,
+        });
+      }
 
       // Si no hay sesión, solo mostrar rutinas locales
       if (!session) {
+        console.log("🔍 No hay sesión, mostrando solo rutinas locales:", localRoutines);
         setRoutines(localRoutines);
         setLoading(false);
         return;
@@ -50,26 +62,40 @@ export default function HomeScreen() {
         .eq("user_id", session.user.id);
 
       if (error) {
-        console.error("Error al cargar rutinas del usuario:", error);
+        console.error("❌ Error al cargar rutinas del usuario:", error.message);
         setRoutines(localRoutines);
         setLoading(false);
         return;
       }
 
       // Mapear rutinas remotas
-      const remoteRoutines: CombinedRoutine[] = (data ?? []).map((r) => ({
-        id: r.id,
-        name: r.name,
-        level: r.level,
-        duration: r.duration,
-        style: r.style,
-        source: "remote",
-      }));
+      const remoteRoutines: CombinedRoutine[] = (data ?? [])
+        .map((r) => {
+          const validLevel = ["Principiante", "Intermedio", "Avanzado"].includes(r.level ?? "")
+            ? r.level
+            : "Principiante";
+          return {
+            id: r.id, // Supabase siempre devuelve un id (UUID)
+            name: r.name,
+            level: validLevel as "Principiante" | "Intermedio" | "Avanzado" | undefined,
+            duration: r.duration,
+            style: r.style,
+            source: "remote" as const,
+          };
+        })
+        .filter((r) => !!r.id); // Filtrar sin predicado de tipo
+
+      if (remoteRoutines.length < (data?.length ?? 0)) {
+        console.warn("⚠️ Algunas rutinas remotas fueron filtradas por tener id undefined:", {
+          filteredCount: (data?.length ?? 0) - remoteRoutines.length,
+        });
+      }
 
       // Combinar rutinas locales y remotas
+      console.log("✅ Rutinas cargadas:", { local: localRoutines.length, remote: remoteRoutines.length });
       setRoutines([...localRoutines, ...remoteRoutines]);
     } catch (e) {
-      console.error("Error inesperado al cargar rutinas:", e);
+      console.error("❌ Error inesperado al cargar rutinas:", e);
     } finally {
       setLoading(false);
     }
@@ -94,11 +120,21 @@ export default function HomeScreen() {
 
   // Función para manejar la selección de una rutina
   const handleSelectRoutine = (routine: CombinedRoutine) => {
+    if (!routine.id) {
+      console.error("❌ Intento de navegar a una rutina sin id:", routine);
+      Alert.alert("Error", "No se puede acceder a esta rutina.");
+      return;
+    }
     router.push(`/rutina/${routine.id}`);
   };
 
   // Función para manejar la edición de una rutina
   const handleEditRoutine = (routine: CombinedRoutine) => {
+    if (!routine.id) {
+      console.error("❌ Intento de editar una rutina sin id:", routine);
+      Alert.alert("Error", "No se puede editar esta rutina.");
+      return;
+    }
     router.push(`/rutina/editar/${routine.id}`);
   };
 
@@ -129,7 +165,10 @@ export default function HomeScreen() {
 
   // Función para eliminar una rutina
   const handleDeleteRoutine = async (routine: CombinedRoutine) => {
-    if (routine.source !== "remote") return;
+    if (routine.source !== "remote" || !routine.id) {
+      console.error("❌ Intento de eliminar una rutina no remota o sin id:", routine);
+      return;
+    }
 
     const confirmed = await confirmDeletion(
       `¿Eliminar la rutina "${routine.name}"? Esta acción no se puede deshacer.`
@@ -147,9 +186,10 @@ export default function HomeScreen() {
 
     if (error) {
       Alert.alert("Error", "Error al eliminar la rutina. Intenta nuevamente.");
-      console.error(error);
+      console.error("❌ Error al eliminar rutina:", error.message);
     } else {
       setRoutines((prev) => prev.filter((r) => r.id !== routine.id));
+      console.log("✅ Rutina eliminada correctamente:", routine.id);
     }
 
     setLoading(false);
@@ -172,14 +212,14 @@ export default function HomeScreen() {
       {/* Lista de rutinas */}
       <FlatList
         data={routines}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.id ?? "fallback-" + Math.random().toString()}
         renderItem={({ item }) => (
           <View style={styles.card}>
             <Pressable onPress={() => handleSelectRoutine(item)} style={{ flex: 1 }}>
               <Text style={styles.cardTitle}>{item.name}</Text>
-              <Text style={styles.cardText}>⏱️ Duración: {item.duration} min</Text>
-              <Text style={styles.cardText}>⚡ Nivel: {item.level}</Text>
-              <Text style={styles.cardText}>🔥 Estilo: {item.style}</Text>
+              <Text style={styles.cardText}>⏱️ Duración: {item.duration ?? "N/A"} min</Text>
+              <Text style={styles.cardText}>⚡ Nivel: {item.level ?? "N/A"}</Text>
+              <Text style={styles.cardText}>🔥 Estilo: {item.style ?? "N/A"}</Text>
               <Text style={styles.originText}>
                 {item.source === "local" ? "📁 Local" : "☁️ Personal"}
               </Text>

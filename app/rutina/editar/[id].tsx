@@ -14,26 +14,26 @@ import {
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { supabase } from "@/lib/supabase";
-import { v4 as uuidv4 } from "uuid";
+import { updateRoutineWithBlocks } from "@/lib/supabaseService";
 
 // Definición de interfaces para ejercicios y bloques
 interface Exercise {
-  id: string;
-  name: string; // Nombre del ejercicio (o título en bloques de preparación)
-  order: number; // Orden dentro del bloque
-  duration?: number; // Duración en segundos
-  reps?: number; // Cantidad de repeticiones
-  equipment?: string; // Equipamiento necesario
-  block_id?: string; // ID del bloque asociado
+  id?: string;
+  name: string;
+  order: number;
+  duration?: number;
+  reps?: number;
+  equipment?: string;
+  block_id?: string;
 }
 
 interface Block {
-  id: string;
-  title: string; // Título del bloque
-  order: number; // Orden dentro de la rutina
-  repeat: string; // Cantidad de repeticiones (como string para el input)
-  is_preparation?: boolean; // Indica si es bloque de preparación
-  exercises: Exercise[]; // Lista de ejercicios
+  id?: string;
+  title: string;
+  order: number;
+  repeat: string;
+  is_preparation?: boolean;
+  exercises: Exercise[];
 }
 
 export default function EditRoutineScreen() {
@@ -53,7 +53,7 @@ export default function EditRoutineScreen() {
 
   // Función para restringir input a solo números
   const restrictToNumbers = (text: string) => {
-    return text.replace(/[^0-9]/g, ""); // Elimina todo lo que no sea dígito
+    return text.replace(/[^0-9]/g, "");
   };
 
   // Efecto para cargar los datos de la rutina
@@ -156,19 +156,18 @@ export default function EditRoutineScreen() {
     setBlocks((prev) => {
       const copy = [...prev];
       copy[index] = { ...copy[index], ...changes };
-      // Si es bloque de preparación, fijar título y ajustar ejercicios
       if (changes.is_preparation) {
         copy[index].title = "Preparación";
         copy[index].exercises = [
           {
-            id: copy[index].exercises[0]?.id || uuidv4(),
+            id: copy[index].exercises[0]?.id,
             name: copy[index].exercises[0]?.name || "Preparación",
             order: 1,
             duration: copy[index].exercises[0]?.duration,
             equipment: copy[index].exercises[0]?.equipment || "",
           },
         ];
-        copy[index].repeat = "1"; // Bloques de preparación tienen 1 repetición
+        copy[index].repeat = "1";
       }
       return copy;
     });
@@ -184,12 +183,11 @@ export default function EditRoutineScreen() {
     setBlocks((prev) => [
       ...prev,
       {
-        id: uuidv4(),
         title: "",
         order: prev.length + 1,
         repeat: "1",
         is_preparation: false,
-        exercises: [{ id: uuidv4(), name: "", order: 1, duration: undefined, reps: undefined, equipment: "" }],
+        exercises: [{ name: "", order: 1, duration: undefined, reps: undefined, equipment: "" }],
       },
     ]);
   };
@@ -199,10 +197,9 @@ export default function EditRoutineScreen() {
     setBlocks((prev) => {
       const copy = [...prev];
       const block = copy[blockIndex];
-      if (block.is_preparation) return copy; // No permitir más ejercicios en bloques de preparación
+      if (block.is_preparation) return copy;
       const exercises = block.exercises;
       exercises.push({
-        id: uuidv4(),
         name: "",
         order: exercises.length + 1,
         duration: undefined,
@@ -218,7 +215,7 @@ export default function EditRoutineScreen() {
     setBlocks((prev) => {
       const copy = [...prev];
       const block = copy[blockIndex];
-      if (block.is_preparation) return copy; // No permitir eliminar el ejercicio de preparación
+      if (block.is_preparation) return copy;
       copy[blockIndex].exercises = copy[blockIndex].exercises
         .filter((_, i) => i !== exIndex)
         .map((ex, i) => ({ ...ex, order: i + 1 }));
@@ -310,92 +307,63 @@ export default function EditRoutineScreen() {
 
   // Función para guardar los cambios
   const handleSave = async () => {
-    console.log("🧨 handleSave iniciado");
+    console.log("🧨 Iniciando guardado de rutina con ID:", id);
     if (!validate() || !id) {
-      console.log("❌ handleSave detenido: Validación fallida o ID no proporcionado");
+      console.log("❌ Guardado detenido: Validación fallida o ID no proporcionado");
       Alert.alert("Error", "No se puede guardar debido a datos inválidos o falta de ID.");
       return;
     }
 
     setLoading(true);
     try {
-      console.log("📡 Actualizando rutina en Supabase...");
-      const { error: routineError } = await supabase
-        .from("routines")
-        .update({
-          name: routineName,
-          style: style.trim() || null,
-          level: level.trim() || null,
-          duration: duration ? parseInt(duration) : null,
-          rest_between_exercises: parseInt(restBetweenExercises) || 20,
-          rest_between_blocks: parseInt(restBetweenBlocks) || 60,
-        })
-        .eq("id", id);
-
-      if (routineError) {
-        console.log("❌ Error al actualizar rutina:", routineError.message);
-        throw new Error(`Error al actualizar la rutina: ${routineError.message}`);
-      }
-
-      console.log("✅ Rutina actualizada");
-      console.log("📡 Actualizando/insertando bloques...");
-      for (const block of blocks) {
-        const { error: blockError } = await supabase.from("blocks").upsert({
+      const routineToUpdate = {
+        name: routineName,
+        style: style.trim() || undefined,
+        level: level.trim() || undefined,
+        duration: duration ? parseInt(duration) : undefined,
+        rest_between_exercises: parseInt(restBetweenExercises) || 20,
+        rest_between_blocks: parseInt(restBetweenBlocks) || 60,
+        blocks: blocks.map((block, index) => ({
           id: block.id,
-          routine_id: id,
           title: block.title,
           order: block.order,
           repeat: parseInt(block.repeat) || 1,
-          is_preparation: block.is_preparation || false,
-        });
+          is_preparation: block.is_preparation,
+          exercises: block.exercises.map((ex, exIndex) => ({
+            id: ex.id,
+            name: ex.name,
+            order: exIndex + 1,
+            duration: ex.duration,
+            reps: ex.reps,
+            equipment: ex.equipment,
+          })),
+        })),
+      };
 
-        if (blockError) {
-          console.log("❌ Error al guardar bloque:", blockError.message);
-          throw new Error(`Error al guardar el bloque: ${blockError.message}`);
-        }
-
-        const formattedExercises = block.exercises.map((ex, index) => ({
-          id: ex.id,
-          block_id: block.id,
-          name: ex.name,
-          order: index + 1,
-          duration: ex.duration || null,
-          reps: ex.reps || null,
-          equipment: ex.equipment || null,
-        }));
-
-        console.log("📡 Actualizando/insertando ejercicios para bloque:", block.id);
-        const { error: exerciseError } = await supabase.from("exercises").upsert(formattedExercises);
-
-        if (exerciseError) {
-          console.log("❌ Error al guardar ejercicios:", exerciseError.message);
-          throw new Error(`Error al guardar los ejercicios: ${exerciseError.message}`);
-        }
+      const sessionResponse = await supabase.auth.getSession();
+      if (!sessionResponse.data.session) {
+        console.log("❌ No hay sesión activa");
+        Alert.alert("Error", "Debes estar logueado para guardar la rutina.");
+        return;
       }
 
-      console.log("✅ Bloques y ejercicios guardados");
-      console.log("📡 Eliminando bloques antiguos...");
-      const currentBlockIds = blocks.map((b) => b.id);
-      const { error: deleteError } = await supabase
-        .from("blocks")
-        .delete()
-        .eq("routine_id", id)
-        .not("id", "in", currentBlockIds);
-
-      if (deleteError) {
-        console.log("❌ Error al eliminar bloques antiguos:", deleteError.message);
-        throw new Error(`Error al eliminar bloques antiguos: ${deleteError.message}`);
+      const userId = sessionResponse.data.session.user.id;
+      console.log("📡 Llamando a updateRoutineWithBlocks con userId:", userId);
+      const success = await updateRoutineWithBlocks(userId, id, routineToUpdate);
+      if (success) {
+        console.log("✅ Rutina actualizada correctamente");
+        Alert.alert("Éxito", "La rutina se guardó correctamente.");
+        router.replace("/");
+      } else {
+        console.log("❌ Error al actualizar la rutina");
+        Alert.alert("Error", "No se pudo actualizar la rutina.");
       }
-
-      console.log("✅ Guardado completo, mostrando mensaje y navegando al inicio");
-      Alert.alert("Éxito", "La rutina se guardó correctamente.");
-      router.replace("/");
     } catch (e: any) {
-      console.error("❌ Error en handleSave:", e.message || "Desconocido");
+      console.error("❌ Error al guardar la rutina:", e);
       Alert.alert("Error", `Hubo un error al guardar la rutina: ${e.message || "Desconocido"}`);
     } finally {
       setLoading(false);
-      console.log("🛑 handleSave finalizado");
+      console.log("🛑 Guardado finalizado");
     }
   };
 
@@ -467,7 +435,7 @@ export default function EditRoutineScreen() {
 
       {/* Bloques dinámicos */}
       {blocks.map((block, blockIndex) => (
-        <View key={block.id} style={styles.blockContainer}>
+        <View key={block.id || blockIndex} style={styles.blockContainer}>
           <View style={styles.blockHeader}>
             <Text style={styles.blockTitle}>Bloque {blockIndex + 1}</Text>
             {blocks.length > 1 && (
@@ -477,7 +445,6 @@ export default function EditRoutineScreen() {
             )}
           </View>
 
-          {/* Switch para marcar como preparación */}
           <View style={styles.switchContainer}>
             <Text style={styles.label}>¿Es bloque de preparación?</Text>
             <Switch
@@ -490,7 +457,6 @@ export default function EditRoutineScreen() {
                   exercises: value
                     ? [
                         {
-                          id: block.exercises[0]?.id || uuidv4(),
                           name: block.exercises[0]?.name || "Preparación",
                           order: 1,
                           duration: block.exercises[0]?.duration,
@@ -509,7 +475,7 @@ export default function EditRoutineScreen() {
             placeholder="Título del bloque"
             value={block.title}
             onChangeText={(text) => updateBlock(blockIndex, { title: text })}
-            editable={!block.is_preparation} // Bloquear edición si es preparación
+            editable={!block.is_preparation}
           />
 
           <Text style={styles.label}>Repeticiones</Text>
@@ -519,11 +485,11 @@ export default function EditRoutineScreen() {
             keyboardType="numeric"
             value={block.repeat}
             onChangeText={(text) => updateBlock(blockIndex, { repeat: restrictToNumbers(text) })}
-            editable={!block.is_preparation} // Bloquear para bloques de preparación
+            editable={!block.is_preparation}
           />
 
           {block.exercises.map((ex, exIndex) => (
-            <View key={ex.id} style={styles.exerciseContainer}>
+            <View key={ex.id || exIndex} style={styles.exerciseContainer}>
               <View style={styles.exerciseHeader}>
                 <Text style={styles.exerciseTitle}>
                   {block.is_preparation ? "Título" : `Ejercicio ${exIndex + 1}`}

@@ -1,3 +1,5 @@
+// app/rutina/[id].tsx
+
 import { View, Text, ScrollView, ActivityIndicator, StyleSheet, Pressable } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
@@ -18,6 +20,7 @@ export default function RutinaDetalleScreen() {
     if (!id) return;
 
     const loadRoutine = async () => {
+      // Primero intentamos buscar la rutina en local
       const local = routineRegistry[id as string];
       if (local) {
         setRoutine(local);
@@ -25,11 +28,23 @@ export default function RutinaDetalleScreen() {
         return;
       }
 
-      if (!session) return;
-      const all = await fetchUserRoutines(session.user.id);
-      const found = all.find((r: any) => r.id === id);
-      setRoutine(found || null);
-      setLoading(false);
+      // Si no está local, buscamos en Supabase (requiere sesión)
+      if (!session) {
+        setRoutine(null);
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const all = await fetchUserRoutines(session.user.id);
+        const found = all.find((r: any) => r.id === id);
+        setRoutine(found || null);
+      } catch (error) {
+        console.error("❌ Error cargando rutina desde Supabase:", error);
+        setRoutine(null);
+      } finally {
+        setLoading(false);
+      }
     };
 
     loadRoutine();
@@ -54,22 +69,22 @@ export default function RutinaDetalleScreen() {
   return (
     <ScrollView style={styles.container}>
       <Text style={styles.title}>{routine.name}</Text>
-      <Text style={styles.meta}>Nivel: {routine.level}</Text>
-      <Text style={styles.meta}>Estilo: {routine.style}</Text>
-      <Text style={styles.meta}>Duración estimada: {routine.duration} min</Text>
+      <Text style={styles.meta}>Nivel: {routine.level ?? "N/A"}</Text>
+      <Text style={styles.meta}>Estilo: {routine.style ?? "N/A"}</Text>
+      <Text style={styles.meta}>Duración estimada: {routine.duration ?? "N/A"} min</Text>
 
-      {routine.blocks.map((block: any, i: number) => (
+      {routine.blocks?.map((block: any, i: number) => (
         <View key={block.id || i} style={styles.block}>
           <Text style={styles.blockTitle}>
             {i + 1}. {block.title} (x{block.repeat})
           </Text>
-          {block.exercises.map((ex: any, j: number) => (
+          {block.exercises?.map((ex: any, j: number) => (
             <View key={ex.id || j} style={styles.exercise}>
               <Text style={styles.exerciseName}>
                 {j + 1}. {ex.name}
               </Text>
-              {ex.duration && <Text>⏱️ Duración: {ex.duration}s</Text>}
-              {ex.reps && <Text>🔁 Reps: {ex.reps}</Text>}
+              {ex.duration !== null && ex.duration !== undefined && <Text>⏱️ Duración: {ex.duration}s</Text>}
+              {ex.reps !== null && ex.reps !== undefined && <Text>🔁 Reps: {ex.reps}</Text>}
               {ex.equipment && <Text>🏋️ Equipo: {ex.equipment}</Text>}
             </View>
           ))}

@@ -37,10 +37,10 @@ export type Routine = {
 
 // Tipo para un resumen de rutina (usado en listas o vistas previas)
 export type RoutineSummary = {
-  id: string; // ID único de la rutina
+  id?: string; // ID único de la rutina, opcional
   name: string; // Nombre de la rutina
-  level: 'Principiante' | 'Intermedio' | 'Avanzado'; // Nivel de dificultad
-  duration: number; // Duración estimada en minutos
-  style: string; // Estilo de la rutina
+  level?: 'Principiante' | 'Intermedio' | 'Avanzado'; // Nivel de dificultad, opcional
+  duration?: number; // Duración estimada en minutos, opcional
+  style?: string; // Estilo de la rutina, opcional
   source?: 'local' | 'remote'; // Fuente de los datos (local o remota)
 };
