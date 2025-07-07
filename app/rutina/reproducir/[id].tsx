@@ -149,7 +149,7 @@ export default function RoutinePlayerScreen() {
       const duration = next.duration ?? (next.reps ? 30 : 30);
       startTimer(duration);
       playSound("start");
-      console.log(`🔄 Repitiendo bloque: ${block.title} (vuelta ${currentBlockRepeat + 1})`);
+      console.log(`🔄 Repitiendo bloque: ${block.title} (vuelta ${nextRepeat})`);
     } else {
       const nextBlockIndex = currentBlockIndex + 1;
       if (nextBlockIndex < routine.blocks.length) {
@@ -192,6 +192,7 @@ export default function RoutinePlayerScreen() {
     } else {
       // No hay más ejercicios en el bloque, pasar al siguiente bloque
       goToNextBlock();
+      console.log(`🔁 currentBlockIndex: ${currentBlockIndex}, total: ${routine.blocks.length}`);
     }
   }, [routine, currentBlockIndex, currentExerciseIndex, startTimer, playSound, goToNextBlock]);
 
