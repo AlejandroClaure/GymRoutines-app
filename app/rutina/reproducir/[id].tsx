@@ -139,7 +139,8 @@ export default function RoutinePlayerScreen() {
     if (!block) return;
 
     if (currentBlockRepeat < block.repeat) {
-      setCurrentBlockRepeat((r) => r + 1);
+      const nextRepeat = currentBlockRepeat + 1;
+  setCurrentBlockRepeat(nextRepeat);
       setCurrentExerciseIndex(0);
       setCurrentExerciseRepeat(1);
       setIsResting(false);
