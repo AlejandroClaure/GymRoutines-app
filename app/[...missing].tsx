@@ -17,10 +17,10 @@ export default function CatchAllNotFound() {
 
 const styles = StyleSheet.create({
   container: {
-    flex: 1, justifyContent: "center", alignItems: "center", padding: 20,
+    flex: 1, justifyContent: "center", alignItems: "center", padding: 20, backgroundColor: "#fff",
   },
   title: {
-    fontSize: 24, fontWeight: "bold", marginBottom: 16,
+    fontSize: 24, fontWeight: "bold", marginBottom: 16, color: "#000",
   },
   link: {
     fontSize: 18, color: "#3b82f6",
