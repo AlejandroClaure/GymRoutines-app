@@ -330,6 +330,7 @@ export default function RoutinePlayerScreen() {
         const found = routines.find((r) => r.id === id) ?? null;
         if (!found) {
           console.error(`❌ Rutina remota no encontrada: ${id}`);
+          router.replace("/+not-found");
         } else if (!found.blocks || found.blocks.length === 0) {
           console.error(`❌ Rutina remota sin bloques: ${id}`);
         }
@@ -343,7 +344,7 @@ export default function RoutinePlayerScreen() {
     };
 
     loadRoutine();
-  }, [session, id]);
+  }, [session, id, router]);
 
   // Efecto para iniciar el primer ejercicio
   useEffect(() => {

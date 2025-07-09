@@ -1,13 +1,13 @@
-// app/not-found.tsx
+// app/[...missing].tsx
 import { View, Text, Pressable, StyleSheet } from "react-native";
 import { useRouter } from "expo-router";
 
-export default function NotFound() {
+export default function CatchAllNotFound() {
   const router = useRouter();
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>❌ Rutina no encontrada</Text>
+      <Text style={styles.title}>🚫 Página no encontrada</Text>
       <Pressable onPress={() => router.replace("/")}>
         <Text style={styles.link}>Volver al inicio</Text>
       </Pressable>
