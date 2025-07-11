@@ -319,7 +319,7 @@ export default function NuevaRutinaScreen() {
                   title: value ? "Preparación" : "",
                   repeat: value ? "1" : block.repeat,
                   exercises: value
-                    ? [{ name: "preparen los elemntos", order: 1, duration: undefined, equipment: "" }]
+                    ? [{ name: "preparen los elementos", order: 1, duration: undefined, equipment: "" }]
                     : block.exercises,
                 });
               }}

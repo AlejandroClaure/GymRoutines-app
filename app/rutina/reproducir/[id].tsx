@@ -237,6 +237,11 @@ export default function RoutinePlayerScreen() {
       goToNextExercise();
     } else {
       console.log(`🏋️ Finalizando ejercicio: ${exercise.name}`);
+      if (block.is_preparation) {
+    console.log(`🎯 Bloque de preparación finalizado: ${block.title}. Saltando al siguiente bloque...`);
+    goToNextBlock();
+    return;
+  }
       if (exercise.reps && currentExerciseRepeat < exercise.reps) {
         setIsResting(true);
         setIsRepeatingExercise(true);
@@ -257,6 +262,7 @@ export default function RoutinePlayerScreen() {
     currentExerciseRepeat,
     isResting,
     isRepeatingExercise,
+    goToNextBlock,
     startTimer,
     playSound,
     stopBeep,
