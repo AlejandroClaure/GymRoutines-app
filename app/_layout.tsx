@@ -2,9 +2,20 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { useFonts } from 'expo-font';
 import { Slot, Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { Pressable, Alert, Platform, useColorScheme as useNativeColorScheme } from 'react-native';
-import { Feather } from '@expo/vector-icons';
+import {
+  Pressable,
+  Alert,
+  Platform,
+  useColorScheme as useNativeColorScheme,
+  View,
+  Text,
+  Linking,
+  StyleSheet,
+} from 'react-native';
+import { Feather, FontAwesome, FontAwesome5  } from '@expo/vector-icons';
 import { useAuth, AuthProvider } from '@/context/AuthContext';
+import { Analytics } from "@vercel/analytics/react";
+import Head from 'expo-router/head';
 
 export default function RootLayout() {
   const colorScheme = useNativeColorScheme();
@@ -18,7 +29,13 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+        <Head>
+          <title>Gym Routines</title>
+          <link rel="icon" href="/favicon.png" />
+        </Head>
         <AppNavigator />
+        <AppFooter />
+        <Analytics />
         <StatusBar style="light" />
       </ThemeProvider>
     </AuthProvider>
@@ -27,10 +44,6 @@ export default function RootLayout() {
 
 function AppNavigator() {
   const { session, signOut } = useAuth();
-
-  console.log("🟢 Estado de sesión en AppNavigator:", session);
-
-  if (!session) return <Slot />;
 
   const confirmLogout = (): Promise<boolean> => {
     return new Promise((resolve) => {
@@ -52,31 +65,31 @@ function AppNavigator() {
   };
 
   const handleLogout = async () => {
-    console.log("👆 Botón de logout presionado. Mostrando confirmación...");
     const confirmed = await confirmLogout();
-    if (!confirmed) {
-      console.log("🚫 Logout cancelado por el usuario.");
-      return;
-    }
+    if (!confirmed) return;
 
     try {
-      console.log("🔒 Cerrando sesión...");
       await signOut();
-      console.log("✅ Sesión cerrada correctamente");
     } catch (error) {
-      console.error("❌ Error en signOut:", error);
+      console.error("❌ Error al cerrar sesión:", error);
     }
   };
+
+  if (!session) return <Slot />;
 
   return (
     <Stack>
       <Stack.Screen
         name="index"
         options={{
-          title: 'Mis Rutinas',
+          headerTitle: () => (
+            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <FontAwesome5 name="dumbbell" size={20} color="#fff" style={{ marginRight: 8 }} />
+              <Text style={{ color: '#fff', fontWeight: 'bold', fontSize: 18 }}>Gym Routines</Text>
+            </View>
+          ),
           headerStyle: { backgroundColor: '#111827' },
           headerTintColor: '#fff',
-          headerTitleStyle: { color: '#fff' },
           headerRight: () => (
             <Pressable onPress={handleLogout} style={{ marginRight: 16 }}>
               <Feather name="log-out" size={24} color="#fff" />
@@ -90,7 +103,6 @@ function AppNavigator() {
           title: 'Crear Rutina',
           headerStyle: { backgroundColor: '#111827' },
           headerTintColor: '#fff',
-          headerTitleStyle: { color: '#fff' },
         }}
       />
       <Stack.Screen
@@ -99,7 +111,6 @@ function AppNavigator() {
           title: 'Rutina',
           headerStyle: { backgroundColor: '#111827' },
           headerTintColor: '#fff',
-          headerTitleStyle: { color: '#fff' },
         }}
       />
       <Stack.Screen
@@ -108,9 +119,64 @@ function AppNavigator() {
           title: 'Editar Rutina',
           headerStyle: { backgroundColor: '#111827' },
           headerTintColor: '#fff',
-          headerTitleStyle: { color: '#fff' },
         }}
       />
     </Stack>
   );
 }
+
+function AppFooter() {
+  return (
+    <View style={styles.footer}>
+      <Text style={styles.footerText}>
+        © {new Date().getFullYear()} Gym Routines — Dev by{' '}
+        <Text
+          style={styles.link}
+          onPress={() => Linking.openURL("https://github.com/AlejandroClaure")}
+        >
+          AlejandroClaure
+        </Text>
+      </Text>
+      <View style={styles.socialIcons}>
+        <Pressable onPress={() => Linking.openURL("https://github.com/AlejandroClaure")}>
+          <FontAwesome name="github" size={20} color="#fff" />
+        </Pressable>
+        {/*
+        <Pressable onPress={() => Linking.openURL("https://www.instagram.com/")}>
+          <FontAwesome name="instagram" size={20} color="#fff" />
+        </Pressable>
+        <Pressable onPress={() => Linking.openURL("https://www.linkedin.com/in/")}>
+          <FontAwesome name="linkedin" size={20} color="#fff" />
+        </Pressable>
+        */}
+      </View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  footer: {
+    backgroundColor: '#111827',
+    paddingVertical: 16,
+    paddingHorizontal: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#1f2937',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  footerText: {
+    color: '#9ca3af',
+    fontSize: 14,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  link: {
+    color: '#3b82f6',
+    textDecorationLine: 'underline',
+  },
+  socialIcons: {
+    flexDirection: 'row',
+    gap: 16,
+    justifyContent: 'center',
+  },
+});

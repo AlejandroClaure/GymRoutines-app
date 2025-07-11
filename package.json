@@ -19,6 +19,7 @@
     "@react-navigation/elements": "^2.3.8",
     "@react-navigation/native": "^7.1.6",
     "@supabase/supabase-js": "^2.50.3",
+    "@vercel/analytics": "^1.5.0",
     "expo": "~53.0.16",
     "expo-audio": "~0.4.7",
     "expo-auth-session": "~6.2.0",
@@ -56,9 +57,5 @@
     "gh-pages": "^6.3.0",
     "typescript": "~5.8.3"
   },
-  
-  
-
   "private": true
-  
 }
