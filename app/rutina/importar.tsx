@@ -21,16 +21,16 @@ export default function ImportRoutineScreen() {
 
   const handleImport = async () => {
     if (!shareCode.trim()) {
-      Alert.alert("Error", "Ingresa un código de compartir válido.");
+      Alert.alert("Error", "Ingresá un código de compartir válido.");
       return;
     }
 
     setLoading(true);
-    const success = await importRoutineByShareCode(session.user.id, shareCode.trim());
+    const routine = await importRoutineByShareCode(session.user.id, shareCode.trim());
     setLoading(false);
 
-    if (success) {
-      Alert.alert("Éxito", "Rutina importada correctamente.");
+    if (routine) {
+      Alert.alert("Éxito", `Rutina "${routine.name}" importada correctamente.`);
       router.replace("/");
     } else {
       Alert.alert("Error", "Código inválido, expirado o error al importar la rutina.");

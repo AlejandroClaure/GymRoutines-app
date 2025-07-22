@@ -1,6 +1,6 @@
 import { supabase } from "./supabase";
 import { Routine } from "@/types/routine";
-import { generate } from "randomstring"; // For generating share codes
+import { generate } from "randomstring"; // Para generar códigos de compartir
 
 // Obtener todas las rutinas de un usuario, con bloques y ejercicios
 export async function fetchUserRoutines(userId: string): Promise<Routine[] | []> {
@@ -308,10 +308,10 @@ export async function deleteRoutine(routineId: string) {
 // Crear un código de compartir para una rutina
 export async function createRoutineShareCode(routineId: string): Promise<string | null> {
   try {
-    // Clean up expired share codes
+    // Borrar códigos de compartir expirados
     await supabase.from("routine_shares").delete().lte("expires_at", new Date().toISOString());
 
-    // Generate a unique 8-character share code
+    // Generar un código de 8 caracteres único
     const shareCode = generate({
       length: 8,
       charset: "alphanumeric",
@@ -321,7 +321,7 @@ export async function createRoutineShareCode(routineId: string): Promise<string 
     const { error } = await supabase.from("routine_shares").insert({
       routine_id: routineId,
       share_code: shareCode,
-      expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(), // 5 minutes from now
+      expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(), // 5 minutos desde ahora
     });
 
     if (error) {
@@ -329,6 +329,7 @@ export async function createRoutineShareCode(routineId: string): Promise<string 
       return null;
     }
 
+    console.log("✅ Código de compartir creado:", shareCode);
     return shareCode;
   } catch (e) {
     console.error("❌ Error inesperado en createRoutineShareCode:", e);
@@ -337,9 +338,9 @@ export async function createRoutineShareCode(routineId: string): Promise<string 
 }
 
 // Importar una rutina por código de compartir
-export async function importRoutineByShareCode(userId: string, shareCode: string): Promise<boolean> {
+export async function importRoutineByShareCode(userId: string, shareCode: string): Promise<Routine | null> {
   try {
-    // Find the routine by share code
+    // Buscar el código de compartir
     const { data: shareData, error: shareError } = await supabase
       .from("routine_shares")
       .select("routine_id")
@@ -348,11 +349,11 @@ export async function importRoutineByShareCode(userId: string, shareCode: string
       .single();
 
     if (shareError || !shareData) {
-      console.error("❌ Error al obtener código de compartir o código expirado:", shareError?.message);
-      return false;
+      console.error("❌ Error al buscar código de compartir o código expirado:", shareError?.message || "Código no encontrado");
+      return null;
     }
 
-    // Fetch the routine, blocks, and exercises
+    // Obtener la rutina original con bloques y ejercicios
     const { data: routineData, error: routineError } = await supabase
       .from("routines")
       .select(`
@@ -382,11 +383,11 @@ export async function importRoutineByShareCode(userId: string, shareCode: string
       .single();
 
     if (routineError || !routineData) {
-      console.error("❌ Error al obtener rutina:", routineError?.message);
-      return false;
+      console.error("❌ Error al obtener rutina:", routineError?.message || "Rutina no encontrada");
+      return null;
     }
 
-    // Sort blocks and exercises to ensure correct order
+    // Ordenar bloques y ejercicios para asegurar el orden correcto
     if (routineData.blocks) {
       routineData.blocks.sort((a, b) => a.order - b.order);
       routineData.blocks.forEach((block) => {
@@ -396,9 +397,9 @@ export async function importRoutineByShareCode(userId: string, shareCode: string
       });
     }
 
-    // Construct the routine object for the importing user
-    const routineToCreate: Routine = {
-      name: `${routineData.name} (Copia)`,
+    // Construir el objeto de rutina para el usuario que importa
+    const routineToCreate = {
+      name: `${routineData.name} (Importada)`,
       style: routineData.style,
       level: routineData.level,
       duration: routineData.duration,
@@ -419,11 +420,56 @@ export async function importRoutineByShareCode(userId: string, shareCode: string
       })),
     };
 
-    // Create the routine for the importing user
+    // Crear la rutina para el usuario que importa
     const result = await createRoutineWithBlocks(userId, routineToCreate);
-    return !!result; // Return true if creation was successful, false otherwise
+    if (!result) {
+      console.error("❌ Error al crear rutina importada");
+      return null;
+    }
+
+    // Obtener la rutina recién creada para devolverla
+    const { data: newRoutine, error: fetchNewRoutineError } = await supabase
+      .from("routines")
+      .select(`
+        id,
+        user_id,
+        name,
+        style,
+        level,
+        duration,
+        rest_between_exercises,
+        rest_between_blocks,
+        created_at,
+        blocks (
+          id,
+          routine_id,
+          title,
+          "order",
+          repeat,
+          is_preparation,
+          exercises (
+            id,
+            block_id,
+            name,
+            "order",
+            duration,
+            reps,
+            equipment
+          )
+        )
+      `)
+      .eq("id", result.id)
+      .single();
+
+    if (fetchNewRoutineError || !newRoutine) {
+      console.error("❌ Error al obtener rutina importada:", fetchNewRoutineError?.message);
+      return null;
+    }
+
+    console.log("✅ Rutina importada exitosamente:", newRoutine);
+    return newRoutine as Routine;
   } catch (e) {
     console.error("❌ Error inesperado en importRoutineByShareCode:", e);
-    return false;
+    return null;
   }
 }
