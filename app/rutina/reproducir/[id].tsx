@@ -442,7 +442,11 @@ export default function RoutinePlayerScreen() {
   const block = routine.blocks[currentBlockIndex];
   const exercise = block.exercises[currentExerciseIndex];
   const nextBlock = routine.blocks[currentBlockIndex + 1];
-  const showNextBlock = (isResting || block.is_preparation) && nextBlock;
+  const nextExercise = block.exercises[currentExerciseIndex + 1];
+
+  // Mostrar "Siguiente" según el tipo de descanso o bloque
+  const showNextBlock = (block.is_preparation || isRestBetweenBlocks) && nextBlock;
+  const showNextExercise = isResting && !isRestBetweenBlocks && !block.is_preparation && nextExercise;
 
   // Renderizado del reproductor
   return (
@@ -460,6 +464,9 @@ export default function RoutinePlayerScreen() {
         </Text>
         {showNextBlock && (
           <Text style={styles.nextBlock}>Siguiente: {nextBlock.title}</Text>
+        )}
+        {showNextExercise && (
+          <Text style={styles.nextBlock}>Siguiente: {nextExercise.name}</Text>
         )}
         {exercise.reps && !isResting && (
           <Text style={styles.reps}>
