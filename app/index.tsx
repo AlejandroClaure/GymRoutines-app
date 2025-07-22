@@ -1,13 +1,13 @@
-// app/index.tsx
-
 import { View, Text, FlatList, Pressable, StyleSheet, ActivityIndicator, Platform, Alert } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useEffect, useState, useCallback } from "react";
-
 import { useAuth } from "@/context/AuthContext";
 import { routineRegistry } from "@/data/routines/routineRegistry";
 import { supabase } from "@/lib/supabase";
 import { RoutineSummary } from "@/types/routine";
+import { createRoutineShareCode } from "@/lib/supabaseService";
+import { Feather } from "@expo/vector-icons"; // For copy icon
+import * as Clipboard from "expo-clipboard"; // Import expo-clipboard
 
 // Definición del tipo para rutinas combinadas
 type CombinedRoutine = RoutineSummary & {
@@ -31,7 +31,7 @@ export default function HomeScreen() {
             ? r.level
             : "Principiante";
           return {
-            id: r.id ?? key, // Usar la clave del registro si id no está definido
+            id: r.id ?? key,
             name: r.name,
             level: validLevel as "Principiante" | "Intermedio" | "Avanzado" | undefined,
             duration: r.duration,
@@ -39,7 +39,7 @@ export default function HomeScreen() {
             source: "local" as const,
           };
         })
-        .filter((r) => !!r.id); // Filtrar sin predicado de tipo
+        .filter((r) => !!r.id);
 
       if (localRoutines.length < Object.keys(routineRegistry).length) {
         console.warn("⚠️ Algunas rutinas locales fueron filtradas por tener id undefined:", {
@@ -47,7 +47,6 @@ export default function HomeScreen() {
         });
       }
 
-      // Si no hay sesión, solo mostrar rutinas locales
       if (!session) {
         console.log("🔍 No hay sesión, mostrando solo rutinas locales:", localRoutines);
         setRoutines(localRoutines);
@@ -55,7 +54,6 @@ export default function HomeScreen() {
         return;
       }
 
-      // Obtener rutinas remotas desde Supabase
       const { data, error } = await supabase
         .from("routines")
         .select("id, name, level, duration, style")
@@ -68,14 +66,13 @@ export default function HomeScreen() {
         return;
       }
 
-      // Mapear rutinas remotas
       const remoteRoutines: CombinedRoutine[] = (data ?? [])
         .map((r) => {
           const validLevel = ["Principiante", "Intermedio", "Avanzado"].includes(r.level ?? "")
             ? r.level
             : "Principiante";
           return {
-            id: r.id, // Supabase siempre devuelve un id (UUID)
+            id: r.id,
             name: r.name,
             level: validLevel as "Principiante" | "Intermedio" | "Avanzado" | undefined,
             duration: r.duration,
@@ -83,7 +80,7 @@ export default function HomeScreen() {
             source: "remote" as const,
           };
         })
-        .filter((r) => !!r.id); // Filtrar sin predicado de tipo
+        .filter((r) => !!r.id);
 
       if (remoteRoutines.length < (data?.length ?? 0)) {
         console.warn("⚠️ Algunas rutinas remotas fueron filtradas por tener id undefined:", {
@@ -91,7 +88,6 @@ export default function HomeScreen() {
         });
       }
 
-      // Combinar rutinas locales y remotas
       console.log("✅ Rutinas cargadas:", { local: localRoutines.length, remote: remoteRoutines.length });
       setRoutines([...localRoutines, ...remoteRoutines]);
     } catch (e) {
@@ -100,6 +96,36 @@ export default function HomeScreen() {
       setLoading(false);
     }
   }, [session]);
+
+  // Función para copiar una rutina
+  const handleCopyRoutine = async (routine: CombinedRoutine) => {
+    if (routine.source !== "remote" || !routine.id) {
+      console.error("❌ Intento de compartir una rutina no remota o sin id:", routine);
+      Alert.alert("Error", "Solo las rutinas personales pueden ser compartidas.");
+      return;
+    }
+
+    setLoading(true);
+    const shareCode = await createRoutineShareCode(routine.id);
+    setLoading(false);
+
+    if (!shareCode) {
+      Alert.alert("Error", "No se pudo generar el código de compartir.");
+      return;
+    }
+
+    // Copiar al portapapeles
+    try {
+      await Clipboard.setStringAsync(shareCode);
+      Alert.alert(
+        "Código copiado",
+        `El código ${shareCode} ha sido copiado al portapapeles. Compártelo con alguien para que pueda importar la rutina. Válido por 5 minutos.`
+      );
+    } catch (e) {
+      console.error("Error copying to clipboard:", e);
+      Alert.alert("Error", "No se pudo copiar el código al portapapeles. Código: " + shareCode);
+    }
+  };
 
   // Efecto para redirigir al login si no hay sesión
   useEffect(() => {
@@ -141,6 +167,11 @@ export default function HomeScreen() {
   // Función para crear una nueva rutina
   const handleCreateNew = () => {
     router.push("/rutina/nueva");
+  };
+
+  // Función para importar una rutina
+  const handleImportRoutine = () => {
+    router.push("/rutina/importar");
   };
 
   // Función para confirmar la eliminación de una rutina
@@ -233,12 +264,18 @@ export default function HomeScreen() {
                 >
                   <Text style={styles.actionText}>🖊️ Editar</Text>
                 </Pressable>
-
                 <Pressable
                   style={[styles.actionButton, { backgroundColor: "#ef4444" }]}
                   onPress={() => handleDeleteRoutine(item)}
                 >
                   <Text style={styles.actionText}>🗑️ Eliminar</Text>
+                </Pressable>
+                <Pressable
+                  style={[styles.actionButton, { backgroundColor: "#3b82f6" }]}
+                  onPress={() => handleCopyRoutine(item)}
+                >
+                  <Feather name="copy" size={16} color="#fff" />
+                  <Text style={styles.actionText}> Copiar</Text>
                 </Pressable>
               </View>
             )}
@@ -247,10 +284,15 @@ export default function HomeScreen() {
         contentContainerStyle={{ paddingBottom: 40 }}
       />
 
-      {/* Botón para crear una nueva rutina */}
-      <Pressable style={styles.newButton} onPress={handleCreateNew}>
-        <Text style={styles.newButtonText}>➕ Nueva Rutina</Text>
-      </Pressable>
+      {/* Botones para crear e importar rutinas */}
+      <View style={styles.buttonContainer}>
+        <Pressable style={styles.newButton} onPress={handleCreateNew}>
+          <Text style={styles.newButtonText}>➕ Nueva Rutina</Text>
+        </Pressable>
+        <Pressable style={[styles.newButton, { backgroundColor: "#6b7280" }]} onPress={handleImportRoutine}>
+          <Text style={styles.newButtonText}>📥 Importar Rutina</Text>
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -302,6 +344,8 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 8,
     alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
   },
   actionText: {
     color: "#fff",
@@ -309,16 +353,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
   },
   newButton: {
-    marginTop: 20,
+    marginTop: 10,
     padding: 14,
     borderRadius: 10,
     backgroundColor: "#10b981",
     alignItems: "center",
+    flex: 1,
   },
   newButtonText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "bold",
+  },
+  buttonContainer: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 20,
   },
   centered: {
     flex: 1,
