@@ -1,5 +1,3 @@
-// app/rutina/editar/[id].tsx
-
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -15,20 +13,20 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { updateRoutineWithBlocks } from "@/lib/supabaseService";
+import { v4 as uuidv4 } from "uuid"; // Importar uuid para generar IDs
 
 // Definición de interfaces para ejercicios y bloques
 interface Exercise {
-  id?: string;
+  id: string; // Ahora id es obligatorio
   name: string;
   order: number;
   duration?: number;
   reps?: number;
   equipment?: string;
-  block_id?: string;
 }
 
 interface Block {
-  id?: string;
+  id: string; // Ahora id es obligatorio
   title: string;
   order: number;
   repeat: string;
@@ -133,7 +131,6 @@ export default function EditRoutineScreen() {
               duration: ex.duration,
               reps: ex.reps,
               equipment: ex.equipment || "",
-              block_id: ex.block_id,
             })),
         }));
 
@@ -160,7 +157,7 @@ export default function EditRoutineScreen() {
         copy[index].title = "Preparación";
         copy[index].exercises = [
           {
-            id: copy[index].exercises[0]?.id,
+            id: copy[index].exercises[0]?.id || uuidv4(),
             name: copy[index].exercises[0]?.name || "Preparación",
             order: 1,
             duration: copy[index].exercises[0]?.duration,
@@ -183,11 +180,12 @@ export default function EditRoutineScreen() {
     setBlocks((prev) => [
       ...prev,
       {
+        id: uuidv4(),
         title: "",
         order: prev.length + 1,
         repeat: "1",
         is_preparation: false,
-        exercises: [{ name: "", order: 1, duration: undefined, reps: undefined, equipment: "" }],
+        exercises: [{ id: uuidv4(), name: "", order: 1, duration: undefined, reps: undefined, equipment: "" }],
       },
     ]);
   };
@@ -200,6 +198,7 @@ export default function EditRoutineScreen() {
       if (block.is_preparation) return copy;
       const exercises = block.exercises;
       exercises.push({
+        id: uuidv4(),
         name: "",
         order: exercises.length + 1,
         duration: undefined,
@@ -284,6 +283,11 @@ export default function EditRoutineScreen() {
           Alert.alert("Error", "Todos los ejercicios deben tener un nombre.");
           return false;
         }
+        if (!ex.id) {
+          console.log("❌ Validación fallida: Ejercicio sin ID");
+          Alert.alert("Error", `El ejercicio "${ex.name}" debe tener un ID válido.`);
+          return false;
+        }
         if (block.is_preparation) {
           if (!ex.duration) {
             console.log("❌ Validación fallida: Título de preparación sin duración");
@@ -323,7 +327,7 @@ export default function EditRoutineScreen() {
         duration: duration ? parseInt(duration) : undefined,
         rest_between_exercises: parseInt(restBetweenExercises) || 20,
         rest_between_blocks: parseInt(restBetweenBlocks) || 60,
-        blocks: blocks.map((block, index) => ({
+        blocks: blocks.map((block) => ({
           id: block.id,
           title: block.title,
           order: block.order,
@@ -335,7 +339,7 @@ export default function EditRoutineScreen() {
             order: exIndex + 1,
             duration: ex.duration,
             reps: ex.reps,
-            equipment: ex.equipment,
+            equipment: ex.equipment || undefined,
           })),
         })),
       };
@@ -435,7 +439,7 @@ export default function EditRoutineScreen() {
 
       {/* Bloques dinámicos */}
       {blocks.map((block, blockIndex) => (
-        <View key={block.id || blockIndex} style={styles.blockContainer}>
+        <View key={block.id} style={styles.blockContainer}>
           <View style={styles.blockHeader}>
             <Text style={styles.blockTitle}>Bloque {blockIndex + 1}</Text>
             {blocks.length > 1 && (
@@ -457,6 +461,7 @@ export default function EditRoutineScreen() {
                   exercises: value
                     ? [
                         {
+                          id: block.exercises[0]?.id || uuidv4(),
                           name: block.exercises[0]?.name || "Preparación",
                           order: 1,
                           duration: block.exercises[0]?.duration,
@@ -489,7 +494,7 @@ export default function EditRoutineScreen() {
           />
 
           {block.exercises.map((ex, exIndex) => (
-            <View key={ex.id || exIndex} style={styles.exerciseContainer}>
+            <View key={ex.id} style={styles.exerciseContainer}>
               <View style={styles.exerciseHeader}>
                 <Text style={styles.exerciseTitle}>
                   {block.is_preparation ? "Título" : `Ejercicio ${exIndex + 1}`}
