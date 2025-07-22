@@ -1,5 +1,3 @@
-// app/rutina/reproducir/[id].tsx
-
 import { View, Text, StyleSheet, ActivityIndicator, Platform, ScrollView, Pressable } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState, useCallback } from "react";
@@ -11,7 +9,7 @@ import { Routine } from "@/types/routine";
 
 // Componente para reproducir una rutina
 export default function RoutinePlayerScreen() {
-  const { id } = useLocalSearchParams<{ id?: string }>(); // Permitir que id sea opcional
+  const { id } = useLocalSearchParams<{ id?: string }>();
   const router = useRouter();
   const { session } = useAuth();
 
@@ -20,15 +18,15 @@ export default function RoutinePlayerScreen() {
   const [loading, setLoading] = useState(true);
   const [currentBlockIndex, setCurrentBlockIndex] = useState(0);
   const [currentExerciseIndex, setCurrentExerciseIndex] = useState(0);
-  const [currentExerciseRepeat, setCurrentExerciseRepeat] = useState(1); // Repeticiones del ejercicio
-  const [currentBlockRepeat, setCurrentBlockRepeat] = useState(1); // Repeticiones del bloque
+  const [currentExerciseRepeat, setCurrentExerciseRepeat] = useState(1);
+  const [currentBlockRepeat, setCurrentBlockRepeat] = useState(1);
   const [countdown, setCountdown] = useState(0);
   const [isResting, setIsResting] = useState(false);
-  const [isRepeatingExercise, setIsRepeatingExercise] = useState(false); // Descanso entre repeticiones
+  const [isRepeatingExercise, setIsRepeatingExercise] = useState(false);
   const [isActive, setIsActive] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
 
-  const timerRef = useRef<number | null>(null); // Usar number para React Native
+  const timerRef = useRef<number | null>(null);
 
   // Carga de sonidos para el reproductor
   const startSound = useAudioPlayer(require("@/assets/sounds/start.mp3"));
@@ -140,6 +138,7 @@ export default function RoutinePlayerScreen() {
 
     const nextRepeat = currentBlockRepeat + 1;
     if (currentBlockRepeat < block.repeat) {
+      // Repetir el bloque actual
       setCurrentBlockRepeat(nextRepeat);
       setCurrentExerciseIndex(0);
       setCurrentExerciseRepeat(1);
@@ -153,18 +152,37 @@ export default function RoutinePlayerScreen() {
     } else {
       const nextBlockIndex = currentBlockIndex + 1;
       if (nextBlockIndex < routine.blocks.length) {
-        setCurrentBlockIndex(nextBlockIndex);
-        setCurrentBlockRepeat(1);
-        setCurrentExerciseIndex(0);
-        setCurrentExerciseRepeat(1);
-        setIsResting(false);
-        setIsRepeatingExercise(false);
-        const next = routine.blocks[nextBlockIndex].exercises[0];
-        const duration = next.duration ?? (next.reps ? 30 : 30);
-        startTimer(duration);
-        playSound("start");
-        console.log(`➡️ Avanzando al bloque: ${routine.blocks[nextBlockIndex].title}`);
+        const nextBlock = routine.blocks[nextBlockIndex];
+        const isCurrentBlockPreparation = block.is_preparation;
+        const isNextBlockPreparation = nextBlock.is_preparation;
+
+        // Omitir descanso si el bloque actual o el siguiente es de preparación
+        if (isCurrentBlockPreparation || isNextBlockPreparation) {
+          setCurrentBlockIndex(nextBlockIndex);
+          setCurrentBlockRepeat(1);
+          setCurrentExerciseIndex(0);
+          setCurrentExerciseRepeat(1);
+          setIsResting(false);
+          setIsRepeatingExercise(false);
+          const next = nextBlock.exercises[0];
+          const duration = next.duration ?? (next.reps ? 30 : 30);
+          startTimer(duration);
+          playSound("start");
+          console.log(`➡️ Avanzando al bloque: ${nextBlock.title} (sin descanso)`);
+        } else {
+          // Aplicar descanso entre bloques
+          const restDuration = routine.rest_between_blocks ?? 5;
+          setIsResting(true);
+          setCurrentBlockIndex(nextBlockIndex);
+          setCurrentBlockRepeat(1);
+          setCurrentExerciseIndex(0);
+          setCurrentExerciseRepeat(1);
+          setIsRepeatingExercise(false);
+          startTimer(restDuration);
+          console.log(`⏳ Iniciando descanso entre bloques (${restDuration}s)`);
+        }
       } else {
+        // Fin de la rutina
         setIsActive(false);
         router.replace("/");
         console.log("🏁 Rutina finalizada");
@@ -225,6 +243,7 @@ export default function RoutinePlayerScreen() {
       setIsResting(false);
 
       if (isRepeatingExercise) {
+        // Descanso entre repeticiones de un ejercicio
         setIsRepeatingExercise(false);
         setCurrentExerciseRepeat((r) => r + 1);
         const duration = exercise.duration ?? (exercise.reps ? 30 : 30);
@@ -234,14 +253,26 @@ export default function RoutinePlayerScreen() {
         return;
       }
 
+      // Verificar si el descanso fue entre bloques
+      const isRestBetweenBlocks = currentExerciseIndex === 0 && currentBlockRepeat === 1;
+      if (isRestBetweenBlocks) {
+        const next = block.exercises[0];
+        const duration = next.duration ?? (next.reps ? 30 : 30);
+        startTimer(duration);
+        playSound("start");
+        console.log(`🚀 Iniciando bloque: ${block.title}, primer ejercicio: ${next.name}`);
+        return;
+      }
+
+      // Descanso entre ejercicios
       goToNextExercise();
     } else {
       console.log(`🏋️ Finalizando ejercicio: ${exercise.name}`);
       if (block.is_preparation) {
-    console.log(`🎯 Bloque de preparación finalizado: ${block.title}. Saltando al siguiente bloque...`);
-    goToNextBlock();
-    return;
-  }
+        console.log(`🎯 Bloque de preparación finalizado: ${block.title}. Saltando al siguiente bloque...`);
+        goToNextBlock();
+        return;
+      }
       if (exercise.reps && currentExerciseRepeat < exercise.reps) {
         setIsResting(true);
         setIsRepeatingExercise(true);
@@ -255,7 +286,7 @@ export default function RoutinePlayerScreen() {
         console.log(`⏳ Iniciando descanso entre ejercicios (${restDuration}s)`);
       }
     }
-  }, [
+  }, [currentBlockRepeat,
     routine,
     currentBlockIndex,
     currentExerciseIndex,
@@ -387,6 +418,9 @@ export default function RoutinePlayerScreen() {
 
   const block = routine.blocks[currentBlockIndex];
   const exercise = block.exercises[currentExerciseIndex];
+  const isRestBetweenBlocks = isResting && currentExerciseIndex === 0 && currentBlockRepeat === 1;
+  const nextBlock = routine.blocks[currentBlockIndex + 1];
+  const showNextBlock = (isResting || block.is_preparation) && nextBlock;
 
   // Renderizado del reproductor
   return (
@@ -399,15 +433,20 @@ export default function RoutinePlayerScreen() {
         {block.title} — Vuelta {currentBlockRepeat}/{block.repeat}
       </Text>
       <Text style={styles.exercise}>
-        {isResting ? "Descanso" : exercise.name}
+        {isRestBetweenBlocks ? "Descanso entre bloques" : isResting ? "Descanso" : exercise.name}
       </Text>
+      {showNextBlock && (
+        <Text style={styles.nextBlock}>
+          Siguiente: {nextBlock.title}
+        </Text>
+      )}
       {exercise.reps && !isResting && (
         <Text style={styles.reps}>
           Repetición {currentExerciseRepeat}/{exercise.reps}
         </Text>
       )}
       <Text style={styles.timer}>{countdown}s</Text>
-      {exercise.equipment && (
+      {exercise.equipment && !isResting && (
         <Text style={styles.equipment}>{exercise.equipment}</Text>
       )}
 
@@ -464,6 +503,12 @@ const styles = StyleSheet.create({
     color: "#fff",
     textAlign: "center",
     marginBottom: 20,
+  },
+  nextBlock: {
+    fontSize: Platform.OS === "web" ? 40 : 20,
+    color: "#60a5fa",
+    textAlign: "center",
+    marginBottom: 16,
   },
   timer: {
     fontSize: 72,
