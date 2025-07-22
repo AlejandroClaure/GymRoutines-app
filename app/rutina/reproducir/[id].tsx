@@ -173,17 +173,19 @@ export default function RoutinePlayerScreen() {
           // Aplicar descanso entre bloques
           const restDuration = routine.rest_between_blocks ?? 5;
           setIsResting(true);
+          setIsRepeatingExercise(false);
+          startTimer(restDuration);
+          // Actualizar índices para el siguiente bloque después del descanso
           setCurrentBlockIndex(nextBlockIndex);
           setCurrentBlockRepeat(1);
           setCurrentExerciseIndex(0);
           setCurrentExerciseRepeat(1);
-          setIsRepeatingExercise(false);
-          startTimer(restDuration);
           console.log(`⏳ Iniciando descanso entre bloques (${restDuration}s)`);
         }
       } else {
         // Fin de la rutina
         setIsActive(false);
+        setIsResting(false);
         router.replace("/");
         console.log("🏁 Rutina finalizada");
       }
@@ -226,6 +228,7 @@ export default function RoutinePlayerScreen() {
     if (!block) {
       console.error("❌ Bloque no encontrado en índice:", currentBlockIndex);
       setIsActive(false);
+      setIsResting(false);
       router.replace("/");
       return;
     }
@@ -234,6 +237,7 @@ export default function RoutinePlayerScreen() {
     if (!exercise) {
       console.error("❌ Ejercicio no encontrado en índice:", currentExerciseIndex);
       setIsActive(false);
+      setIsResting(false);
       router.replace("/");
       return;
     }
@@ -250,22 +254,22 @@ export default function RoutinePlayerScreen() {
         startTimer(duration);
         playSound("start");
         console.log(`🔁 Volviendo al ejercicio: ${exercise.name} (repetición ${currentExerciseRepeat + 1})`);
-        return;
+      } else {
+        // Verificar si el descanso fue entre bloques
+        const isRestBetweenBlocks = currentExerciseIndex === 0 && currentBlockRepeat === 1;
+        if (isRestBetweenBlocks) {
+          const next = block.exercises[0];
+          const duration = next.duration ?? (next.reps ? 30 : 30);
+          setIsResting(false);
+          setIsRepeatingExercise(false);
+          startTimer(duration);
+          playSound("start");
+          console.log(`🚀 Iniciando bloque: ${block.title}, primer ejercicio: ${next.name}`);
+        } else {
+          // Descanso entre ejercicios
+          goToNextExercise();
+        }
       }
-
-      // Verificar si el descanso fue entre bloques
-      const isRestBetweenBlocks = currentExerciseIndex === 0 && currentBlockRepeat === 1;
-      if (isRestBetweenBlocks) {
-        const next = block.exercises[0];
-        const duration = next.duration ?? (next.reps ? 30 : 30);
-        startTimer(duration);
-        playSound("start");
-        console.log(`🚀 Iniciando bloque: ${block.title}, primer ejercicio: ${next.name}`);
-        return;
-      }
-
-      // Descanso entre ejercicios
-      goToNextExercise();
     } else {
       console.log(`🏋️ Finalizando ejercicio: ${exercise.name}`);
       if (block.is_preparation) {
@@ -282,6 +286,7 @@ export default function RoutinePlayerScreen() {
       } else {
         const restDuration = routine.rest_between_exercises ?? 5;
         setIsResting(true);
+        setIsRepeatingExercise(false);
         startTimer(restDuration);
         console.log(`⏳ Iniciando descanso entre ejercicios (${restDuration}s)`);
       }
@@ -426,51 +431,53 @@ export default function RoutinePlayerScreen() {
   return (
     <ScrollView
       style={styles.container}
-      contentContainerStyle={{ alignItems: "center", justifyContent: "center", paddingBottom: 60 }}
+      contentContainerStyle={{ alignItems: "center", paddingBottom: 60 }}
       keyboardShouldPersistTaps="handled"
     >
-      <Text style={styles.block}>
-        {block.title} — Vuelta {currentBlockRepeat}/{block.repeat}
-      </Text>
-      <Text style={styles.exercise}>
-        {isRestBetweenBlocks ? "Descanso entre bloques" : isResting ? "Descanso" : exercise.name}
-      </Text>
-      {showNextBlock && (
-        <Text style={styles.nextBlock}>
-          Siguiente: {nextBlock.title}
+      <View style={styles.content}>
+        <Text style={styles.block}>
+          {block.title} — Vuelta {currentBlockRepeat}/{block.repeat}
         </Text>
-      )}
-      {exercise.reps && !isResting && (
-        <Text style={styles.reps}>
-          Repetición {currentExerciseRepeat}/{exercise.reps}
+        <Text style={styles.exercise}>
+          {isRestBetweenBlocks ? "Descanso entre bloques" : isResting ? "Descanso" : exercise.name}
         </Text>
-      )}
-      <Text style={styles.timer}>{countdown}s</Text>
-      {exercise.equipment && !isResting && (
-        <Text style={styles.equipment}>{exercise.equipment}</Text>
-      )}
-
-      <View style={styles.controls}>
-        <Pressable onPress={togglePause} style={styles.button}>
-          <Text style={styles.buttonText}>
-            {isPaused ? "▶ Continuar" : "⏸ Pausar"}
+        {showNextBlock && (
+          <Text style={styles.nextBlock}>
+            Siguiente: {nextBlock.title}
           </Text>
-        </Pressable>
-        <Pressable onPress={goToNextExercise} style={styles.button}>
-          <Text style={styles.buttonText}>⏭️ Siguiente Ejercicio</Text>
-        </Pressable>
-        <Pressable onPress={goToNextBlock} style={styles.button}>
-          <Text style={styles.buttonText}>⏭️ Siguiente Bloque</Text>
-        </Pressable>
-        <Pressable onPress={resetExercise} style={styles.button}>
-          <Text style={styles.buttonText}>🔁 Ejercicio</Text>
-        </Pressable>
-        <Pressable onPress={resetBlock} style={styles.button}>
-          <Text style={styles.buttonText}>🔁 Bloque</Text>
-        </Pressable>
-        <Pressable onPress={resetRoutine} style={styles.button}>
-          <Text style={styles.buttonText}>🔁 Rutina</Text>
-        </Pressable>
+        )}
+        {exercise.reps && !isResting && (
+          <Text style={styles.reps}>
+            Repetición {currentExerciseRepeat}/{exercise.reps}
+          </Text>
+        )}
+        <Text style={styles.timer}>{countdown}s</Text>
+        {exercise.equipment && !isResting && (
+          <Text style={styles.equipment}>{exercise.equipment}</Text>
+        )}
+
+        <View style={styles.controls}>
+          <Pressable onPress={togglePause} style={styles.button}>
+            <Text style={styles.buttonText}>
+              {isPaused ? "▶ Continuar" : "⏸ Pausar"}
+            </Text>
+          </Pressable>
+          <Pressable onPress={goToNextExercise} style={styles.button}>
+            <Text style={styles.buttonText}>⏭️ Siguiente Ejercicio</Text>
+          </Pressable>
+          <Pressable onPress={goToNextBlock} style={styles.button}>
+            <Text style={styles.buttonText}>⏭️ Siguiente Bloque</Text>
+          </Pressable>
+          <Pressable onPress={resetExercise} style={styles.button}>
+            <Text style={styles.buttonText}>🔁 Ejercicio</Text>
+          </Pressable>
+          <Pressable onPress={resetBlock} style={styles.button}>
+            <Text style={styles.buttonText}>🔁 Bloque</Text>
+          </Pressable>
+          <Pressable onPress={resetRoutine} style={styles.button}>
+            <Text style={styles.buttonText}>🔁 Rutina</Text>
+          </Pressable>
+        </View>
       </View>
     </ScrollView>
   );
@@ -481,72 +488,82 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: "#111827",
-    paddingHorizontal: 24,
+    paddingHorizontal: 16,
+  },
+  content: {
+    alignItems: "center",
+    paddingTop: Platform.OS === "web" ? 80 : 40,
+    paddingBottom: 20,
   },
   block: {
-    fontSize: Platform.OS === "web" ? 56 : 28,
+    fontSize: Platform.OS === "web" ? 36 : 20,
     color: "#93c5fd",
-    marginTop: Platform.OS === "web" ? 100 : 50,
-    marginBottom: 16,
-    fontWeight: "bold",
-    textAlign: "center",
-  },
-  equipment: {
-    fontSize: Platform.OS === "web" ? 56 : 28,
-    color: "#93c5fd",
-    marginBottom: 16,
-    fontWeight: "bold",
+    marginBottom: 12,
+    fontWeight: "600",
     textAlign: "center",
   },
   exercise: {
-    fontSize: Platform.OS === "web" ? 80 : 40,
+    fontSize: Platform.OS === "web" ? 48 : 28,
     color: "#fff",
     textAlign: "center",
-    marginBottom: 20,
+    marginBottom: 12,
+    fontWeight: "bold",
+    paddingHorizontal: 8,
   },
   nextBlock: {
-    fontSize: Platform.OS === "web" ? 40 : 20,
+    fontSize: Platform.OS === "web" ? 28 : 16,
     color: "#60a5fa",
     textAlign: "center",
-    marginBottom: 16,
+    marginBottom: 12,
   },
   timer: {
-    fontSize: 72,
+    fontSize: Platform.OS === "web" ? 64 : 48,
     color: "#22d3ee",
     fontWeight: "bold",
     textAlign: "center",
+    marginVertical: 8,
   },
   reps: {
-    fontSize: Platform.OS === "web" ? 48 : 24,
+    fontSize: Platform.OS === "web" ? 32 : 18,
     color: "#93c5fd",
-    marginBottom: 16,
+    marginBottom: 12,
+    textAlign: "center",
+  },
+  equipment: {
+    fontSize: Platform.OS === "web" ? 32 : 18,
+    color: "#93c5fd",
+    marginBottom: 12,
     textAlign: "center",
   },
   centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    padding: 24,
-    backgroundColor: "#fff",
+    padding: 16,
+    backgroundColor: "#111827",
   },
   controls: {
     flexDirection: "row",
     flexWrap: "wrap",
     justifyContent: "center",
-    marginTop: 40,
-    gap: 12,
+    marginTop: 20,
+    gap: 8,
+    width: "100%",
+    maxWidth: 600,
   },
   button: {
     backgroundColor: "#3b82f6",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-    margin: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    flex: 1,
+    minWidth: Platform.OS === "web" ? 180 : 120,
+    alignItems: "center",
   },
   buttonText: {
     color: "#fff",
-    fontSize: Platform.OS === "web" ? 32 : 16,
-    fontWeight: "bold",
+    fontSize: Platform.OS === "web" ? 20 : 14,
+    fontWeight: "600",
     textAlign: "center",
   },
 });
