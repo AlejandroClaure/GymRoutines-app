@@ -1,7 +1,6 @@
-// lib/supabaseService.ts
-
 import { supabase } from "./supabase";
 import { Routine } from "@/types/routine";
+import { generate } from "randomstring"; // For generating share codes
 
 // Obtener todas las rutinas de un usuario, con bloques y ejercicios
 export async function fetchUserRoutines(userId: string): Promise<Routine[] | []> {
@@ -304,4 +303,127 @@ export async function deleteRoutine(routineId: string) {
   }
 
   return true;
+}
+
+// Crear un código de compartir para una rutina
+export async function createRoutineShareCode(routineId: string): Promise<string | null> {
+  try {
+    // Clean up expired share codes
+    await supabase.from("routine_shares").delete().lte("expires_at", new Date().toISOString());
+
+    // Generate a unique 8-character share code
+    const shareCode = generate({
+      length: 8,
+      charset: "alphanumeric",
+      capitalization: "uppercase",
+    });
+
+    const { error } = await supabase.from("routine_shares").insert({
+      routine_id: routineId,
+      share_code: shareCode,
+      expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(), // 5 minutes from now
+    });
+
+    if (error) {
+      console.error("❌ Error al crear código de compartir:", error.message);
+      return null;
+    }
+
+    return shareCode;
+  } catch (e) {
+    console.error("❌ Error inesperado en createRoutineShareCode:", e);
+    return null;
+  }
+}
+
+// Importar una rutina por código de compartir
+export async function importRoutineByShareCode(userId: string, shareCode: string): Promise<boolean> {
+  try {
+    // Find the routine by share code
+    const { data: shareData, error: shareError } = await supabase
+      .from("routine_shares")
+      .select("routine_id")
+      .eq("share_code", shareCode)
+      .gte("expires_at", new Date().toISOString())
+      .single();
+
+    if (shareError || !shareData) {
+      console.error("❌ Error al obtener código de compartir o código expirado:", shareError?.message);
+      return false;
+    }
+
+    // Fetch the routine, blocks, and exercises
+    const { data: routineData, error: routineError } = await supabase
+      .from("routines")
+      .select(`
+        name,
+        style,
+        level,
+        duration,
+        rest_between_exercises,
+        rest_between_blocks,
+        blocks (
+          id,
+          title,
+          "order",
+          repeat,
+          is_preparation,
+          exercises (
+            id,
+            name,
+            "order",
+            duration,
+            reps,
+            equipment
+          )
+        )
+      `)
+      .eq("id", shareData.routine_id)
+      .single();
+
+    if (routineError || !routineData) {
+      console.error("❌ Error al obtener rutina:", routineError?.message);
+      return false;
+    }
+
+    // Sort blocks and exercises to ensure correct order
+    if (routineData.blocks) {
+      routineData.blocks.sort((a, b) => a.order - b.order);
+      routineData.blocks.forEach((block) => {
+        if (block.exercises) {
+          block.exercises.sort((a, b) => a.order - b.order);
+        }
+      });
+    }
+
+    // Construct the routine object for the importing user
+    const routineToCreate: Routine = {
+      name: `${routineData.name} (Copia)`,
+      style: routineData.style,
+      level: routineData.level,
+      duration: routineData.duration,
+      rest_between_exercises: routineData.rest_between_exercises,
+      rest_between_blocks: routineData.rest_between_blocks,
+      blocks: routineData.blocks.map((block) => ({
+        title: block.title,
+        order: block.order,
+        repeat: block.repeat,
+        is_preparation: block.is_preparation,
+        exercises: block.exercises.map((ex) => ({
+          name: ex.name,
+          order: ex.order,
+          duration: ex.duration,
+          reps: ex.reps,
+          equipment: ex.equipment,
+        })),
+      })),
+    };
+
+    // Create the routine for the importing user
+    const result = await createRoutineWithBlocks(userId, routineToCreate);
+    return !!result; // Return true if creation was successful, false otherwise
+  } catch (e) {
+    console.error("❌ Error inesperado en importRoutineByShareCode:", e);
+    return false;
+  }
 }
