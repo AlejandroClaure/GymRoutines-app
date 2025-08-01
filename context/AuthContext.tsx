@@ -90,8 +90,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setIsLoading(true);
 
     try {
-      // Definimos la URL de redirección (usamos variable de entorno o fallback local)
-      const redirectTo = process.env.EXPO_PUBLIC_BASE_URL || 'http://localhost:8081';
+      // Definimos la URL de redirección (usamos variable de entorno o fallback local || 'http://localhost:8081')
+      const redirectTo = process.env.EXPO_PUBLIC_BASE_URL ;
 
       // Iniciamos el flujo de autenticación con Google usando Supabase
       const { data, error } = await supabase.auth.signInWithOAuth({
