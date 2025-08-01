@@ -1,15 +1,16 @@
+// app/index.tsx
 import { View, Text, FlatList, Pressable, StyleSheet, ActivityIndicator, Platform, Alert } from "react-native";
 import { useRouter, useFocusEffect } from "expo-router";
 import { useEffect, useState, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 import { routineRegistry } from "@/data/routines/routineRegistry";
 import { supabase } from "@/lib/supabase";
 import { RoutineSummary } from "@/types/routine";
 import { createRoutineShareCode } from "@/lib/supabaseService";
-import { Feather } from "@expo/vector-icons"; // For copy icon
-import * as Clipboard from "expo-clipboard"; // Import expo-clipboard
+import { Feather } from "@expo/vector-icons";
+import * as Clipboard from "expo-clipboard";
 
-// Definición del tipo para rutinas combinadas
 type CombinedRoutine = RoutineSummary & {
   source: "local" | "remote";
 };
@@ -17,14 +18,27 @@ type CombinedRoutine = RoutineSummary & {
 export default function HomeScreen() {
   const router = useRouter();
   const { session } = useAuth();
+  const { resolvedTheme, isThemeLoading } = useTheme();
   const [loading, setLoading] = useState(true);
   const [routines, setRoutines] = useState<CombinedRoutine[]>([]);
 
-  // Función para cargar las rutinas
+  // Definir colores según el tema
+  const colors = {
+    background: resolvedTheme === "dark" ? "#0f172a" : "#ffffff",
+    card: resolvedTheme === "dark" ? "#1e293b" : "#f9fafb",
+    text: resolvedTheme === "dark" ? "#e5e7eb" : "#111827",
+    textSecondary: resolvedTheme === "dark" ? "#9ca3af" : "#6b7280",
+    primary: "#10b981",
+    secondary: "#6b7280",
+    destructive: "#ef4444",
+    edit: "#f59e0b",
+    share: "#3b82f6",
+  };
+
   const fetchRoutines = useCallback(async () => {
     setLoading(true);
     try {
-      // Cargar rutinas locales desde el registro
+      // Cargar rutinas locales
       const localRoutines: CombinedRoutine[] = Object.entries(routineRegistry)
         .map(([key, r]) => {
           const validLevel = ["Principiante", "Intermedio", "Avanzado"].includes(r.level ?? "")
@@ -47,20 +61,28 @@ export default function HomeScreen() {
         });
       }
 
+      // Si no hay sesión, mostrar solo rutinas locales
       if (!session) {
-        console.log("🔍 No hay sesión, mostrando solo rutinas locales:", localRoutines);
+        console.log("🔍 No hay sesión, mostrando solo rutinas locales:", localRoutines.length);
         setRoutines(localRoutines);
         setLoading(false);
         return;
       }
 
+      // Cargar rutinas remotas
       const { data, error } = await supabase
         .from("routines")
         .select("id, name, level, duration, style")
         .eq("user_id", session.user.id);
 
       if (error) {
-        console.error("❌ Error al cargar rutinas del usuario:", error.message);
+        console.error("❌ Error al cargar rutinas del usuario:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+        });
+        Alert.alert("Error", "No se pudieron cargar las rutinas. Intenta de nuevo.");
         setRoutines(localRoutines);
         setLoading(false);
         return;
@@ -90,14 +112,19 @@ export default function HomeScreen() {
 
       console.log("✅ Rutinas cargadas:", { local: localRoutines.length, remote: remoteRoutines.length });
       setRoutines([...localRoutines, ...remoteRoutines]);
-    } catch (e) {
-      console.error("❌ Error inesperado al cargar rutinas:", e);
+    } catch (e: any) {
+      console.error("❌ Error inesperado al cargar rutinas:", {
+        message: e.message,
+        details: e.details,
+        hint: e.hint,
+        code: e.code,
+      });
+      Alert.alert("Error", "Ocurrió un error inesperado al cargar las rutinas.");
     } finally {
       setLoading(false);
     }
   }, [session]);
 
-  // Función para copiar una rutina
   const handleCopyRoutine = async (routine: CombinedRoutine) => {
     if (routine.source !== "remote" || !routine.id) {
       console.error("❌ Intento de compartir una rutina no remota o sin id:", routine);
@@ -114,20 +141,23 @@ export default function HomeScreen() {
       return;
     }
 
-    // Copiar al portapapeles
     try {
       await Clipboard.setStringAsync(shareCode);
       Alert.alert(
         "Código copiado",
-        `El código ${shareCode} ha sido copiado al portapapeles. Compártelo con alguien para que pueda importar la rutina. Válido por 5 minutos.`
+        `El código ${shareCode} ha sido copiado al portapapeles. Compártelo para que otros puedan importar la rutina. Válido por 5 minutos.`
       );
-    } catch (e) {
-      console.error("Error copying to clipboard:", e);
-      Alert.alert("Error", "No se pudo copiar el código al portapapeles. Código: " + shareCode);
+    } catch (e: any) {
+      console.error("❌ Error al copiar al portapapeles:", {
+        message: e.message,
+        details: e.details,
+        hint: e.hint,
+        code: e.code,
+      });
+      Alert.alert("Error", `No se pudo copiar el código al portapapeles. Código: ${shareCode}`);
     }
   };
 
-  // Efecto para redirigir al login si no hay sesión
   useEffect(() => {
     if (session === null) {
       const timer = setTimeout(() => {
@@ -137,14 +167,12 @@ export default function HomeScreen() {
     }
   }, [session, router]);
 
-  // Efecto para recargar rutinas cuando la pantalla está en foco
   useFocusEffect(
     useCallback(() => {
       fetchRoutines();
     }, [fetchRoutines])
   );
 
-  // Función para manejar la selección de una rutina
   const handleSelectRoutine = (routine: CombinedRoutine) => {
     if (!routine.id) {
       console.error("❌ Intento de navegar a una rutina sin id:", routine);
@@ -154,7 +182,6 @@ export default function HomeScreen() {
     router.push(`/rutina/${routine.id}`);
   };
 
-  // Función para manejar la edición de una rutina
   const handleEditRoutine = (routine: CombinedRoutine) => {
     if (!routine.id) {
       console.error("❌ Intento de editar una rutina sin id:", routine);
@@ -164,17 +191,14 @@ export default function HomeScreen() {
     router.push(`/rutina/editar/${routine.id}`);
   };
 
-  // Función para crear una nueva rutina
   const handleCreateNew = () => {
     router.push("/rutina/nueva");
   };
 
-  // Función para importar una rutina
   const handleImportRoutine = () => {
     router.push("/rutina/importar");
   };
 
-  // Función para confirmar la eliminación de una rutina
   const confirmDeletion = (message: string): Promise<boolean> => {
     return new Promise((resolve) => {
       if (Platform.OS === "web") {
@@ -194,7 +218,6 @@ export default function HomeScreen() {
     });
   };
 
-  // Función para eliminar una rutina
   const handleDeleteRoutine = async (routine: CombinedRoutine) => {
     if (routine.source !== "remote" || !routine.id) {
       console.error("❌ Intento de eliminar una rutina no remota o sin id:", routine);
@@ -216,8 +239,13 @@ export default function HomeScreen() {
       .eq("user_id", session!.user.id);
 
     if (error) {
+      console.error("❌ Error al eliminar rutina:", {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      });
       Alert.alert("Error", "Error al eliminar la rutina. Intenta nuevamente.");
-      console.error("❌ Error al eliminar rutina:", error.message);
     } else {
       setRoutines((prev) => prev.filter((r) => r.id !== routine.id));
       console.log("✅ Rutina eliminada correctamente:", routine.id);
@@ -226,52 +254,47 @@ export default function HomeScreen() {
     setLoading(false);
   };
 
-  // Mostrar pantalla de carga mientras se obtienen los datos
-  if (loading) {
+  if (loading || isThemeLoading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#3b82f6" />
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
-  // Renderizado principal de la pantalla
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>🏋️‍♂️ Mis Rutinas</Text>
-
-      {/* Lista de rutinas */}
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      <Text style={[styles.title, { color: colors.text }]}>🏋️‍♂️ Mis Rutinas</Text>
       <FlatList
         data={routines}
-        keyExtractor={(item) => item.id ?? "fallback-" + Math.random().toString()}
+        keyExtractor={(item) => item.id ?? `fallback-${Math.random().toString()}`}
         renderItem={({ item }) => (
-          <View style={styles.card}>
+          <View style={[styles.card, { backgroundColor: colors.card }]}>
             <Pressable onPress={() => handleSelectRoutine(item)} style={{ flex: 1 }}>
-              <Text style={styles.cardTitle}>{item.name}</Text>
-              <Text style={styles.cardText}>⏱️ Duración: {item.duration ?? "N/A"} min</Text>
-              <Text style={styles.cardText}>⚡ Nivel: {item.level ?? "N/A"}</Text>
-              <Text style={styles.cardText}>🔥 Estilo: {item.style ?? "N/A"}</Text>
-              <Text style={styles.originText}>
+              <Text style={[styles.cardTitle, { color: colors.text }]}>{item.name}</Text>
+              <Text style={[styles.cardText, { color: colors.text }]}>⏱️ Duración: {item.duration ?? "N/A"} min</Text>
+              <Text style={[styles.cardText, { color: colors.text }]}>⚡ Nivel: {item.level ?? "N/A"}</Text>
+              <Text style={[styles.cardText, { color: colors.text }]}>🔥 Estilo: {item.style ?? "N/A"}</Text>
+              <Text style={[styles.originText, { color: colors.textSecondary }]}>
                 {item.source === "local" ? "📁 Local" : "☁️ Personal"}
               </Text>
             </Pressable>
-
             {item.source === "remote" && (
               <View style={styles.actionRow}>
                 <Pressable
-                  style={[styles.actionButton, { backgroundColor: "#f59e0b" }]}
+                  style={[styles.actionButton, { backgroundColor: colors.edit }]}
                   onPress={() => handleEditRoutine(item)}
                 >
                   <Text style={styles.actionText}>🖊️ Editar</Text>
                 </Pressable>
                 <Pressable
-                  style={[styles.actionButton, { backgroundColor: "#ef4444" }]}
+                  style={[styles.actionButton, { backgroundColor: colors.destructive }]}
                   onPress={() => handleDeleteRoutine(item)}
                 >
                   <Text style={styles.actionText}>🗑️ Eliminar</Text>
                 </Pressable>
                 <Pressable
-                  style={[styles.actionButton, { backgroundColor: "#3b82f6" }]}
+                  style={[styles.actionButton, { backgroundColor: colors.share }]}
                   onPress={() => handleCopyRoutine(item)}
                 >
                   <Feather name="copy" size={16} color="#fff" />
@@ -283,13 +306,11 @@ export default function HomeScreen() {
         )}
         contentContainerStyle={{ paddingBottom: 40 }}
       />
-
-      {/* Botones para crear e importar rutinas */}
       <View style={styles.buttonContainer}>
-        <Pressable style={styles.newButton} onPress={handleCreateNew}>
+        <Pressable style={[styles.newButton, { backgroundColor: colors.primary }]} onPress={handleCreateNew}>
           <Text style={styles.newButtonText}>➕ Nueva Rutina</Text>
         </Pressable>
-        <Pressable style={[styles.newButton, { backgroundColor: "#6b7280" }]} onPress={handleImportRoutine}>
+        <Pressable style={[styles.newButton, { backgroundColor: colors.secondary }]} onPress={handleImportRoutine}>
           <Text style={styles.newButtonText}>📥 Importar Rutina</Text>
         </Pressable>
       </View>
@@ -297,13 +318,16 @@ export default function HomeScreen() {
   );
 }
 
-// Estilos para la interfaz de usuario
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    paddingTop: 60,
+    paddingTop: 20,
     paddingHorizontal: 16,
-    backgroundColor: "#fff",
+  },
+  centered: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
   title: {
     fontSize: 28,
@@ -312,11 +336,14 @@ const styles = StyleSheet.create({
     textAlign: "center",
   },
   card: {
-    backgroundColor: "#f9fafb",
     borderRadius: 16,
     padding: 16,
     marginBottom: 16,
     elevation: 2,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
   cardTitle: {
     fontSize: 20,
@@ -325,12 +352,11 @@ const styles = StyleSheet.create({
   },
   cardText: {
     fontSize: 14,
-    color: "#444",
+    marginBottom: 2,
   },
   originText: {
     marginTop: 4,
     fontSize: 12,
-    color: "#888",
     fontStyle: "italic",
   },
   actionRow: {
@@ -348,32 +374,24 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   actionText: {
-    color: "#fff",
+    color: "#ffffff",
     fontWeight: "bold",
     fontSize: 14,
-  },
-  newButton: {
-    marginTop: 10,
-    padding: 14,
-    borderRadius: 10,
-    backgroundColor: "#10b981",
-    alignItems: "center",
-    flex: 1,
-  },
-  newButtonText: {
-    color: "#fff",
-    fontSize: 16,
-    fontWeight: "bold",
   },
   buttonContainer: {
     flexDirection: "row",
     gap: 8,
     marginBottom: 20,
   },
-  centered: {
+  newButton: {
     flex: 1,
-    justifyContent: "center",
+    padding: 14,
+    borderRadius: 10,
     alignItems: "center",
-    backgroundColor: "#fff",
+  },
+  newButtonText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "bold",
   },
 });

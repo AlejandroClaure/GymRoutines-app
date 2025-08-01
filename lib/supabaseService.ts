@@ -1,6 +1,118 @@
+// lib/supabaseService.ts
 import { supabase } from "./supabase";
 import { Routine } from "@/types/routine";
-import { generate } from "randomstring"; // Para generar códigos de compartir
+import { generate } from "randomstring";
+
+// Definir tipo ThemeOption para consistencia
+export type ThemeOption = 'light' | 'dark' | 'system';
+
+// Guardar preferencia de tema
+export async function upsertThemePreference(userId: string, theme: ThemeOption) {
+  const { error } = await supabase
+    .from("user_preferences")
+    .upsert(
+      {
+        user_id: userId,
+        theme,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" }
+    );
+
+  if (error) {
+    console.error("❌ Error al guardar tema:", {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+    });
+    return false;
+  }
+
+  console.log("✅ Tema guardado exitosamente para usuario:", userId);
+  return true;
+}
+
+// Obtener preferencia de tema
+export async function getThemePreference(userId: string): Promise<ThemeOption | null> {
+  const { data, error } = await supabase
+    .from("user_preferences")
+    .select("theme")
+    .eq("user_id", userId)
+    .single();
+
+  if (error) {
+    console.error("❌ Error al obtener tema:", {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+    });
+    return null;
+  }
+
+  return data?.theme ?? null;
+}
+
+// Notificación de recordatorio de entrenamiento para el usuario
+export async function upsertNotificationPreference({
+  userId,
+  hour,
+  minute,
+  days,
+}: {
+  userId: string;
+  hour: number;
+  minute: number;
+  days: number[];
+}) {
+  const { error } = await supabase
+    .from("notification_preferences")
+    .upsert(
+      {
+        user_id: userId,
+        hour,
+        minute,
+        days,
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id" }
+    );
+
+  if (error) {
+    console.error("❌ Error al guardar preferencias:", {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+    });
+    return false;
+  }
+
+  console.log("✅ Preferencias de notificación guardadas para usuario:", userId);
+  return true;
+}
+
+// Obtener preferencia de notificación
+export async function getNotificationPreference(userId: string) {
+  const { data, error } = await supabase
+    .from("notification_preferences")
+    .select("*")
+    .eq("user_id", userId)
+    .single();
+
+  if (error) {
+    console.error("❌ Error al obtener preferencias:", {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+    });
+    return null;
+  }
+
+  return data;
+}
 
 // Obtener todas las rutinas de un usuario, con bloques y ejercicios
 export async function fetchUserRoutines(userId: string): Promise<Routine[] | []> {
@@ -38,7 +150,12 @@ export async function fetchUserRoutines(userId: string): Promise<Routine[] | []>
     .order("created_at", { ascending: false });
 
   if (error) {
-    console.error("❌ Error al obtener rutinas:", error.message);
+    console.error("❌ Error al obtener rutinas:", {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+    });
     return [];
   }
 
@@ -96,7 +213,12 @@ export async function createRoutineWithBlocks(userId: string, routine: {
     .single();
 
   if (routineError || !routineData) {
-    console.error("❌ Error al crear rutina:", routineError?.message);
+    console.error("❌ Error al crear rutina:", {
+      message: routineError?.message,
+      details: routineError?.details,
+      hint: routineError?.hint,
+      code: routineError?.code,
+    });
     return null;
   }
 
@@ -117,7 +239,12 @@ export async function createRoutineWithBlocks(userId: string, routine: {
     .select("id, order");
 
   if (blocksError || !blocksData) {
-    console.error("❌ Error al insertar bloques:", blocksError?.message);
+    console.error("❌ Error al insertar bloques:", {
+      message: blocksError?.message,
+      details: blocksError?.details,
+      hint: blocksError?.hint,
+      code: blocksError?.code,
+    });
     return null;
   }
 
@@ -139,7 +266,12 @@ export async function createRoutineWithBlocks(userId: string, routine: {
   if (allExercises.length > 0) {
     const { error: exError } = await supabase.from("exercises").insert(allExercises);
     if (exError) {
-      console.error("❌ Error al insertar ejercicios:", exError.message);
+      console.error("❌ Error al insertar ejercicios:", {
+        message: exError.message,
+        details: exError.details,
+        hint: exError.hint,
+        code: exError.code,
+      });
       return null;
     }
   }
@@ -188,7 +320,12 @@ export async function updateRoutineWithBlocks(userId: string, routineId: string,
     .single();
 
   if (routineError || !routineData) {
-    console.error("❌ Error al actualizar rutina:", routineError?.message);
+    console.error("❌ Error al actualizar rutina:", {
+      message: routineError?.message,
+      details: routineError?.details,
+      hint: routineError?.hint,
+      code: routineError?.code,
+    });
     return false;
   }
 
@@ -198,7 +335,12 @@ export async function updateRoutineWithBlocks(userId: string, routineId: string,
     .eq("routine_id", routineId);
 
   if (fetchBlockError || !existingBlocks) {
-    console.error("❌ Error al obtener bloques existentes:", fetchBlockError?.message);
+    console.error("❌ Error al obtener bloques existentes:", {
+      message: fetchBlockError?.message,
+      details: fetchBlockError?.details,
+      hint: fetchBlockError?.hint,
+      code: fetchBlockError?.code,
+    });
     return false;
   }
 
@@ -222,7 +364,12 @@ export async function updateRoutineWithBlocks(userId: string, routineId: string,
       .single();
 
     if (blockError || !blockData) {
-      console.error("❌ Error al upsertar bloque:", blockError?.message);
+      console.error("❌ Error al upsertar bloque:", {
+        message: blockError?.message,
+        details: blockError?.details,
+        hint: blockError?.hint,
+        code: blockError?.code,
+      });
       return false;
     }
 
@@ -232,7 +379,12 @@ export async function updateRoutineWithBlocks(userId: string, routineId: string,
       .eq("block_id", blockData.id);
 
     if (fetchExerciseError || !existingExercises) {
-      console.error("❌ Error al obtener ejercicios existentes:", fetchExerciseError?.message);
+      console.error("❌ Error al obtener ejercicios existentes:", {
+        message: fetchExerciseError?.message,
+        details: fetchExerciseError?.details,
+        hint: fetchExerciseError?.hint,
+        code: fetchExerciseError?.code,
+      });
       return false;
     }
 
@@ -254,7 +406,12 @@ export async function updateRoutineWithBlocks(userId: string, routineId: string,
       .upsert(exercisesToUpsert);
 
     if (exerciseError) {
-      console.error("❌ Error al upsertar ejercicios:", exerciseError.message);
+      console.error("❌ Error al upsertar ejercicios:", {
+        message: exerciseError.message,
+        details: exerciseError.details,
+        hint: exerciseError.hint,
+        code: exerciseError.code,
+      });
       return false;
     }
 
@@ -267,7 +424,12 @@ export async function updateRoutineWithBlocks(userId: string, routineId: string,
         .in("id", exercisesToDelete);
 
       if (deleteExerciseError) {
-        console.error("❌ Error al eliminar ejercicios obsoletos:", deleteExerciseError.message);
+        console.error("❌ Error al eliminar ejercicios obsoletos:", {
+          message: deleteExerciseError.message,
+          details: deleteExerciseError.details,
+          hint: deleteExerciseError.hint,
+          code: deleteExerciseError.code,
+        });
         return false;
       }
     }
@@ -282,7 +444,12 @@ export async function updateRoutineWithBlocks(userId: string, routineId: string,
       .in("id", blocksToDelete);
 
     if (deleteBlockError) {
-      console.error("❌ Error al eliminar bloques obsoletos:", deleteBlockError.message);
+      console.error("❌ Error al eliminar bloques obsoletos:", {
+        message: deleteBlockError.message,
+        details: deleteBlockError.details,
+        hint: deleteBlockError.hint,
+        code: deleteBlockError.code,
+      });
       return false;
     }
   }
@@ -298,7 +465,12 @@ export async function deleteRoutine(routineId: string) {
     .eq("id", routineId);
 
   if (error) {
-    console.error("❌ Error al borrar rutina:", error.message);
+    console.error("❌ Error al borrar rutina:", {
+      message: error.message,
+      details: error.details,
+      hint: error.hint,
+      code: error.code,
+    });
     return false;
   }
 
@@ -325,14 +497,24 @@ export async function createRoutineShareCode(routineId: string): Promise<string 
     });
 
     if (error) {
-      console.error("❌ Error al crear código de compartir:", error.message);
+      console.error("❌ Error al crear código de compartir:", {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      });
       return null;
     }
 
     console.log("✅ Código de compartir creado:", shareCode);
     return shareCode;
-  } catch (e) {
-    console.error("❌ Error inesperado en createRoutineShareCode:", e);
+  } catch (e: any) {
+    console.error("❌ Error inesperado en createRoutineShareCode:", {
+      message: e.message,
+      details: e.details,
+      hint: e.hint,
+      code: e.code,
+    });
     return null;
   }
 }
@@ -349,7 +531,12 @@ export async function importRoutineByShareCode(userId: string, shareCode: string
       .single();
 
     if (shareError || !shareData) {
-      console.error("❌ Error al buscar código de compartir o código expirado:", shareError?.message || "Código no encontrado");
+      console.error("❌ Error al buscar código de compartir o código expirado:", {
+        message: shareError?.message || "Código no encontrado",
+        details: shareError?.details,
+        hint: shareError?.hint,
+        code: shareError?.code,
+      });
       return null;
     }
 
@@ -383,7 +570,12 @@ export async function importRoutineByShareCode(userId: string, shareCode: string
       .single();
 
     if (routineError || !routineData) {
-      console.error("❌ Error al obtener rutina:", routineError?.message || "Rutina no encontrada");
+      console.error("❌ Error al obtener rutina:", {
+        message: routineError?.message || "Rutina no encontrada",
+        details: routineError?.details,
+        hint: routineError?.hint,
+        code: routineError?.code,
+      });
       return null;
     }
 
@@ -462,14 +654,24 @@ export async function importRoutineByShareCode(userId: string, shareCode: string
       .single();
 
     if (fetchNewRoutineError || !newRoutine) {
-      console.error("❌ Error al obtener rutina importada:", fetchNewRoutineError?.message);
+      console.error("❌ Error al obtener rutina importada:", {
+        message: fetchNewRoutineError?.message,
+        details: fetchNewRoutineError?.details,
+        hint: fetchNewRoutineError?.hint,
+        code: fetchNewRoutineError?.code,
+      });
       return null;
     }
 
     console.log("✅ Rutina importada exitosamente:", newRoutine);
     return newRoutine as Routine;
-  } catch (e) {
-    console.error("❌ Error inesperado en importRoutineByShareCode:", e);
+  } catch (e: any) {
+    console.error("❌ Error inesperado en importRoutineByShareCode:", {
+      message: e.message,
+      details: e.details,
+      hint: e.hint,
+      code: e.code,
+    });
     return null;
   }
 }

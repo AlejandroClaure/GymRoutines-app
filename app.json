@@ -1,28 +1,37 @@
 {
   "expo": {
-    "name": "my-gym-rutines",
-    "slug": "my-gym-rutines",
+    "name": "Gym Routines",
+    "slug": "gym-routines",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "mygymrutines",
+    "scheme": "gymroutines",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
-    "ios": {
-      "supportsTablet": true
+    "splash": {
+      "image": "./assets/images/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#0f172a" 
     },
-    "permissions": [
-      {
-        "name": "audioRecording",
-        "reason": "Necesario para reproducir sonidos durante la rutina."
-      }
-    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.aleclau12.gymroutines"
+    },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
-        "backgroundColor": "#ffffff"
+        "backgroundColor": "#0f172a" 
       },
-      "edgeToEdgeEnabled": true
+      "package": "com.aleclau12.gymroutines",
+      "versionCode": 1,
+      "edgeToEdgeEnabled": true,
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "RECORD_AUDIO"
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -37,10 +46,22 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 200,
           "resizeMode": "contain",
-          "backgroundColor": "#ffffff"
+          "backgroundColor": "#0f172a"
         }
       ],
-      "expo-audio",
+      [
+        "expo-notifications",
+        {
+          "icon": "./assets/notification-icon.png",
+          "color": "#10b981"
+        }
+      ],
+      [
+        "expo-audio",
+        {
+          "enableInSilenceMode": true
+        }
+      ],
       "expo-web-browser"
     ],
     "experiments": {

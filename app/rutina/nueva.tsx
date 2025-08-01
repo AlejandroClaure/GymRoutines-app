@@ -1,5 +1,3 @@
-// app/rutina/nueva.tsx
-
 import React, { useState } from "react";
 import {
   View,
@@ -14,38 +12,40 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 import { createRoutineWithBlocks } from "@/lib/supabaseService";
 
 // Definición de tipos para ejercicios
 type Exercise = {
-  name: string; // Nombre del ejercicio (o título en bloques de preparación)
-  order: number; // Orden dentro del bloque
-  duration?: number; // Duración en segundos
-  reps?: number; // Cantidad de repeticiones
-  equipment?: string; // Equipamiento necesario
+  name: string;
+  order: number;
+  duration?: number;
+  reps?: number;
+  equipment?: string;
 };
 
 // Definición de tipos para bloques
 type Block = {
-  title: string; // Título del bloque
-  order: number; // Orden dentro de la rutina
-  repeat: string; // Cantidad de repeticiones (como string para el input)
-  is_preparation?: boolean; // Indica si es bloque de preparación
-  exercises: Exercise[]; // Lista de ejercicios
+  title: string;
+  order: number;
+  repeat: string;
+  is_preparation?: boolean;
+  exercises: Exercise[];
 };
 
 // Componente principal para crear una nueva rutina
 export default function NuevaRutinaScreen() {
   const router = useRouter();
   const { session } = useAuth();
+  const { resolvedTheme, isThemeLoading } = useTheme();
 
   // Estados para los campos de la rutina
   const [name, setName] = useState("");
   const [style, setStyle] = useState("");
   const [level, setLevel] = useState("");
   const [duration, setDuration] = useState("");
-  const [restBetweenExercises, setRestBetweenExercises] = useState("5"); // Default: 5 segundos
-  const [restBetweenBlocks, setRestBetweenBlocks] = useState("5"); // Default: 5 segundos
+  const [restBetweenExercises, setRestBetweenExercises] = useState("5");
+  const [restBetweenBlocks, setRestBetweenBlocks] = useState("5");
   const [blocks, setBlocks] = useState<Block[]>([
     {
       title: "",
@@ -57,16 +57,38 @@ export default function NuevaRutinaScreen() {
   ]);
   const [loading, setLoading] = useState(false);
 
-  // Función para restringir input a solo números
-  const restrictToNumbers = (text: string) => {
-    return text.replace(/[^0-9]/g, ""); // Elimina todo lo que no sea dígito
+  // Definir colores según el tema
+  const colors = {
+    background: resolvedTheme === "dark" ? "#0f172a" : "#ffffff",
+    card: resolvedTheme === "dark" ? "#1e293b" : "#f9fafb",
+    text: resolvedTheme === "dark" ? "#e5e7eb" : "#111827",
+    textSecondary: resolvedTheme === "dark" ? "#9ca3af" : "#6b7280",
+    inputBorder: resolvedTheme === "dark" ? "#4b5563" : "#d1d5db",
+    disabledInput: resolvedTheme === "dark" ? "#374151" : "#e5e7eb",
+    error: "#ef4444",
+    primary: "#3b82f6",
+    destructive: "#ef4444",
+    disabledButton: resolvedTheme === "dark" ? "#6b7280" : "#93c5fd",
   };
 
-  // Verifica si el usuario está autenticado
+  // Función para restringir input a solo números
+  const restrictToNumbers = (text: string): string => {
+    return text.replace(/[^0-9]/g, "");
+  };
+
+  // Verifica si el usuario está autenticado o si el tema está cargando
   if (!session) {
     return (
-      <View style={styles.centered}>
-        <Text>No estás logueado.</Text>
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <Text style={[styles.error, { color: colors.error }]}>No estás logueado.</Text>
+      </View>
+    );
+  }
+
+  if (isThemeLoading) {
+    return (
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -95,7 +117,6 @@ export default function NuevaRutinaScreen() {
     setBlocks((prev) => {
       const copy = [...prev];
       copy[index] = { ...copy[index], ...block };
-      // Si es bloque de preparación, fijar título y ajustar el ejercicio
       if (block.is_preparation) {
         copy[index].title = "Preparación";
         copy[index].exercises = [
@@ -106,7 +127,7 @@ export default function NuevaRutinaScreen() {
             equipment: copy[index].exercises[0]?.equipment || "",
           },
         ];
-        copy[index].repeat = "1"; // Bloques de preparación tienen 1 repetición
+        copy[index].repeat = "1";
       }
       return copy;
     });
@@ -117,7 +138,7 @@ export default function NuevaRutinaScreen() {
     setBlocks((prev) => {
       const copy = [...prev];
       const block = copy[blockIndex];
-      if (block.is_preparation) return copy; // No permitir más ejercicios en bloques de preparación
+      if (block.is_preparation) return copy;
       const exercises = block.exercises;
       exercises.push({
         name: "",
@@ -135,7 +156,7 @@ export default function NuevaRutinaScreen() {
     setBlocks((prev) => {
       const copy = [...prev];
       const block = copy[blockIndex];
-      if (block.is_preparation) return copy; // No permitir eliminar el ejercicio de preparación
+      if (block.is_preparation) return copy;
       copy[blockIndex].exercises = copy[blockIndex].exercises
         .filter((_, i) => i !== exerciseIndex)
         .map((ex, i) => ({ ...ex, order: i + 1 }));
@@ -159,158 +180,210 @@ export default function NuevaRutinaScreen() {
     });
   };
 
-  // Función para manejar el envío del formulario
-  const handleSubmit = async () => {
+  // Función para validar los datos antes de enviar
+  const validate = (): boolean => {
+    console.log("🔍 Iniciando validación de datos...");
     if (!name.trim()) {
-      Alert.alert("Error", "Debes ingresar un nombre para la rutina.");
-      return;
+      console.log("❌ Validación fallida: Nombre de rutina vacío");
+      Alert.alert("Error", "El nombre de la rutina es obligatorio.");
+      return false;
+    }
+
+    if (duration && isNaN(parseInt(duration))) {
+      console.log("❌ Validación fallida: Duración no válida");
+      Alert.alert("Error", "La duración debe ser un número válido.");
+      return false;
+    }
+
+    if (restBetweenExercises && isNaN(parseInt(restBetweenExercises))) {
+      console.log("❌ Validación fallida: Descanso entre ejercicios no válido");
+      Alert.alert("Error", "El descanso entre ejercicios debe ser un número válido.");
+      return false;
+    }
+
+    if (restBetweenBlocks && isNaN(parseInt(restBetweenBlocks))) {
+      console.log("❌ Validación fallida: Descanso entre bloques no válido");
+      Alert.alert("Error", "El descanso entre bloques debe ser un número válido.");
+      return false;
     }
 
     for (const block of blocks) {
       if (!block.title.trim()) {
-        Alert.alert("Error", "Cada bloque debe tener un título.");
-        return;
-      }
-      if (block.exercises.length === 0) {
-        Alert.alert("Error", `El bloque "${block.title}" debe tener al menos un ejercicio.`);
-        return;
+        console.log("❌ Validación fallida: Título de bloque vacío");
+        Alert.alert("Error", "Todos los bloques deben tener un título.");
+        return false;
       }
       if (!block.repeat || isNaN(Number(block.repeat)) || Number(block.repeat) < 1) {
-        Alert.alert("Error", `El bloque "${block.title}" debe tener al menos 1 repetición.`);
-        return;
+        console.log("❌ Validación fallida: Repeticiones de bloque no válidas");
+        Alert.alert("Error", `El bloque "${block.title}" debe repetirse al menos una vez.`);
+        return false;
+      }
+      if (block.exercises.length === 0) {
+        console.log("❌ Validación fallida: Bloque sin ejercicios");
+        Alert.alert("Error", `El bloque "${block.title}" debe tener al menos un ejercicio.`);
+        return false;
       }
       for (const ex of block.exercises) {
         if (!ex.name.trim()) {
-          Alert.alert("Error", "Cada ejercicio debe tener un nombre.");
-          return;
+          console.log("❌ Validación fallida: Nombre de ejercicio vacío");
+          Alert.alert("Error", "Todos los ejercicios deben tener un nombre.");
+          return false;
         }
         if (block.is_preparation) {
           if (!ex.duration) {
+            console.log("❌ Validación fallida: Título de preparación sin duración");
             Alert.alert(
               "Error",
               `El título "${ex.name}" en el bloque de preparación debe tener una duración.`
             );
-            return;
+            return false;
           }
         } else if (!ex.duration && !ex.reps) {
-          Alert.alert(
-            "Error",
-            `El ejercicio "${ex.name}" debe tener duración o repeticiones definidas.`
-          );
-          return;
+          console.log("❌ Validación fallida: Ejercicio sin duración ni repeticiones");
+          Alert.alert("Error", `El ejercicio "${ex.name}" debe tener duración o repeticiones.`);
+          return false;
         }
       }
     }
 
+    console.log("✅ Validación exitosa");
+    return true;
+  };
+
+  // Función para manejar el envío del formulario
+  const handleSubmit = async () => {
+    console.log("🧨 Iniciando creación de rutina...");
+    if (!validate()) {
+      console.log("❌ Creación detenida: Validación fallida");
+      return;
+    }
+
     setLoading(true);
-
-    // Preparar datos para enviar a Supabase
-    const routineToCreate = {
-      name,
-      style: style.trim() || undefined,
-      level: level.trim() || undefined,
-      duration: duration ? parseInt(duration, 10) : undefined,
-      rest_between_exercises: parseInt(restBetweenExercises, 10) || 5,
-      rest_between_blocks: parseInt(restBetweenBlocks, 10) || 5,
-      blocks: blocks.map((block, index) => ({
-        title: block.title,
-        order: index + 1,
-        repeat: parseInt(block.repeat, 10) || 1,
-        is_preparation: block.is_preparation,
-        exercises: block.exercises.map((ex) => ({
-          name: ex.name,
-          order: ex.order,
-          duration: ex.duration,
-          reps: ex.reps,
-          equipment: ex.equipment,
-        })),
-      })),
-    };
-
     try {
+      const routineToCreate = {
+        name,
+        style: style.trim() || undefined,
+        level: level.trim() || undefined,
+        duration: duration ? parseInt(duration, 10) : undefined,
+        rest_between_exercises: parseInt(restBetweenExercises, 10) || 5,
+        rest_between_blocks: parseInt(restBetweenBlocks, 10) || 5,
+        blocks: blocks.map((block, index) => ({
+          title: block.title,
+          order: index + 1,
+          repeat: parseInt(block.repeat, 10) || 1,
+          is_preparation: block.is_preparation,
+          exercises: block.exercises.map((ex) => ({
+            name: ex.name,
+            order: ex.order,
+            duration: ex.duration,
+            reps: ex.reps,
+            equipment: ex.equipment,
+          })),
+        })),
+      };
+
+      console.log("📡 Enviando datos a createRoutineWithBlocks para usuario:", session.user.id);
       const result = await createRoutineWithBlocks(session.user.id, routineToCreate);
       if (result) {
+        console.log("✅ Rutina creada correctamente con ID:", result.id);
         Alert.alert("Éxito", "Rutina creada correctamente");
         router.replace("/");
       } else {
+        console.log("❌ Error al crear la rutina");
         Alert.alert("Error", "No se pudo crear la rutina.");
       }
-    } catch (error) {
-      console.error(error);
-      Alert.alert("Error", "Ocurrió un error al crear la rutina.");
+    } catch (error: any) {
+      console.error("❌ Error al crear la rutina:", {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      });
+      Alert.alert("Error", `Ocurrió un error al crear la rutina: ${error.message || "Desconocido"}`);
     } finally {
       setLoading(false);
+      console.log("🛑 Creación finalizada");
     }
   };
 
+  // JSX renderizado (líneas 420 en adelante)
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Crear Nueva Rutina</Text>
+    <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}>
+      <Text style={[styles.title, { color: colors.text }]}>Crear Nueva Rutina</Text>
 
-      <Text style={styles.label}>Nombre *</Text>
+      <Text style={[styles.label, { color: colors.textSecondary }]}>Nombre *</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.card, color: colors.text }]}
         placeholder="Nombre de la rutina"
+        placeholderTextColor={colors.textSecondary}
         value={name}
         onChangeText={setName}
       />
 
-      <Text style={styles.label}>Estilo</Text>
+      <Text style={[styles.label, { color: colors.textSecondary }]}>Estilo</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.card, color: colors.text }]}
         placeholder="Ej: Fuerza, Cardio, HIIT..."
+        placeholderTextColor={colors.textSecondary}
         value={style}
         onChangeText={setStyle}
       />
 
-      <Text style={styles.label}>Nivel</Text>
+      <Text style={[styles.label, { color: colors.textSecondary }]}>Nivel</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.card, color: colors.text }]}
         placeholder="Ej: Principiante, Intermedio, Avanzado"
+        placeholderTextColor={colors.textSecondary}
         value={level}
         onChangeText={setLevel}
       />
 
-      <Text style={styles.label}>Duración (minutos)</Text>
+      <Text style={[styles.label, { color: colors.textSecondary }]}>Duración (minutos)</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.card, color: colors.text }]}
         placeholder="Duración total estimada"
+        placeholderTextColor={colors.textSecondary}
         keyboardType="numeric"
         value={duration}
         onChangeText={(text) => setDuration(restrictToNumbers(text))}
       />
 
-      <Text style={styles.label}>Descanso entre ejercicios (segundos)</Text>
+      <Text style={[styles.label, { color: colors.textSecondary }]}>Descanso entre ejercicios (segundos)</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.card, color: colors.text }]}
+        placeholder="Ej: 20"
+        placeholderTextColor={colors.textSecondary}
         keyboardType="numeric"
         value={restBetweenExercises}
         onChangeText={(text) => setRestBetweenExercises(restrictToNumbers(text))}
       />
 
-      <Text style={styles.label}>Descanso entre bloques (segundos)</Text>
+      <Text style={[styles.label, { color: colors.textSecondary }]}>Descanso entre bloques (segundos)</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.card, color: colors.text }]}
+        placeholder="Ej: 60"
+        placeholderTextColor={colors.textSecondary}
         keyboardType="numeric"
         value={restBetweenBlocks}
         onChangeText={(text) => setRestBetweenBlocks(restrictToNumbers(text))}
       />
 
-      {/* Bloques dinámicos */}
       {blocks.map((block, blockIndex) => (
-        <View key={blockIndex} style={styles.blockContainer}>
+        <View
+          key={blockIndex}
+          style={[styles.blockContainer, { backgroundColor: colors.card, borderColor: colors.inputBorder }]}
+        >
           <View style={styles.blockHeader}>
-            <Text style={styles.blockTitle}>Bloque {blockIndex + 1}</Text>
+            <Text style={[styles.blockTitle, { color: colors.text }]}>Bloque {blockIndex + 1}</Text>
             {blocks.length > 1 && (
               <Pressable onPress={() => removeBlock(blockIndex)} style={styles.removeButton}>
-                <Text style={styles.removeButtonText}>Eliminar bloque</Text>
+                <Text style={[styles.removeButtonText, { color: colors.destructive }]}>Eliminar bloque</Text>
               </Pressable>
             )}
           </View>
 
-          {/* Switch para marcar como preparación */}
           <View style={styles.switchContainer}>
-            <Text style={styles.label}>¿Es bloque de preparación?</Text>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>¿Es bloque de preparación?</Text>
             <Switch
               value={block.is_preparation}
               onValueChange={(value) => {
@@ -319,36 +392,57 @@ export default function NuevaRutinaScreen() {
                   title: value ? "Preparación" : "",
                   repeat: value ? "1" : block.repeat,
                   exercises: value
-                    ? [{ name: "preparen los elementos", order: 1, duration: undefined, equipment: "" }]
+                    ? [{ name: "Preparación", order: 1, duration: undefined, equipment: "" }]
                     : block.exercises,
                 });
               }}
+              trackColor={{ false: colors.textSecondary, true: colors.primary }}
+              thumbColor={colors.background}
             />
           </View>
 
-          <Text style={styles.label}>Título</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Título</Text>
           <TextInput
-            style={[styles.input, block.is_preparation && styles.disabledInput]}
+            style={[
+              styles.input,
+              {
+                borderColor: colors.inputBorder,
+                backgroundColor: block.is_preparation ? colors.disabledInput : colors.card,
+                color: colors.text,
+              },
+            ]}
             placeholder="Título del bloque"
+            placeholderTextColor={colors.textSecondary}
             value={block.title}
             onChangeText={(text) => updateBlock(blockIndex, { title: text })}
-            editable={!block.is_preparation} // Bloquear edición si es preparación
+            editable={!block.is_preparation}
           />
 
-          <Text style={styles.label}>Repeticiones</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Repeticiones</Text>
           <TextInput
-            style={[styles.input, block.is_preparation && styles.disabledInput]}
+            style={[
+              styles.input,
+              {
+                borderColor: colors.inputBorder,
+                backgroundColor: block.is_preparation ? colors.disabledInput : colors.card,
+                color: colors.text,
+              },
+            ]}
             keyboardType="numeric"
             placeholder="Ej: 1"
+            placeholderTextColor={colors.textSecondary}
             value={block.repeat}
             onChangeText={(text) => updateBlock(blockIndex, { repeat: restrictToNumbers(text) })}
-            editable={!block.is_preparation} // Bloquear para bloques de preparación
+            editable={!block.is_preparation}
           />
 
           {block.exercises.map((exercise, exIndex) => (
-            <View key={exIndex} style={styles.exerciseContainer}>
+            <View
+              key={exIndex}
+              style={[styles.exerciseContainer, { backgroundColor: colors.card, borderColor: colors.inputBorder }]}
+            >
               <View style={styles.exerciseHeader}>
-                <Text style={styles.exerciseTitle}>
+                <Text style={[styles.exerciseTitle, { color: colors.text }]}>
                   {block.is_preparation ? "Título" : `Ejercicio ${exIndex + 1}`}
                 </Text>
                 {!block.is_preparation && block.exercises.length > 1 && (
@@ -356,23 +450,25 @@ export default function NuevaRutinaScreen() {
                     onPress={() => removeExercise(blockIndex, exIndex)}
                     style={styles.removeButton}
                   >
-                    <Text style={styles.removeButtonText}>Eliminar ejercicio</Text>
+                    <Text style={[styles.removeButtonText, { color: colors.destructive }]}>Eliminar ejercicio</Text>
                   </Pressable>
                 )}
               </View>
 
               <TextInput
-                style={styles.input}
-                placeholder={block.is_preparation ? "Preparen los elementos" : "Nombre del ejercicio"}
+                style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.card, color: colors.text }]}
+                placeholder={block.is_preparation ? "Preparación" : "Nombre del ejercicio"}
+                placeholderTextColor={colors.textSecondary}
                 value={exercise.name}
                 onChangeText={(text) => updateExercise(blockIndex, exIndex, { name: text })}
               />
 
-              <Text style={styles.label}>Duración (segundos)</Text>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>Duración (segundos)</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.card, color: colors.text }]}
                 keyboardType="numeric"
                 placeholder="Ej: 30"
+                placeholderTextColor={colors.textSecondary}
                 value={exercise.duration?.toString() || ""}
                 onChangeText={(text) => {
                   const val = parseInt(restrictToNumbers(text), 10);
@@ -384,11 +480,12 @@ export default function NuevaRutinaScreen() {
 
               {!block.is_preparation && (
                 <>
-                  <Text style={styles.label}>Repeticiones</Text>
+                  <Text style={[styles.label, { color: colors.textSecondary }]}>Repeticiones</Text>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.card, color: colors.text }]}
                     keyboardType="numeric"
                     placeholder="Ej: 15"
+                    placeholderTextColor={colors.textSecondary}
                     value={exercise.reps?.toString() || ""}
                     onChangeText={(text) => {
                       const val = parseInt(restrictToNumbers(text), 10);
@@ -400,10 +497,11 @@ export default function NuevaRutinaScreen() {
                 </>
               )}
 
-              <Text style={styles.label}>Equipo</Text>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>Equipo</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.card, color: colors.text }]}
                 placeholder="Ej: Mancuernas, Barra..."
+                placeholderTextColor={colors.textSecondary}
                 value={exercise.equipment || ""}
                 onChangeText={(text) => updateExercise(blockIndex, exIndex, { equipment: text })}
               />
@@ -411,20 +509,30 @@ export default function NuevaRutinaScreen() {
           ))}
 
           {!block.is_preparation && (
-            <Pressable onPress={() => addExercise(blockIndex)} style={styles.addButton}>
+            <Pressable
+              style={[styles.addButton, { backgroundColor: colors.primary }]}
+              onPress={() => addExercise(blockIndex)}
+            >
               <Text style={styles.addButtonText}>+ Agregar ejercicio</Text>
             </Pressable>
           )}
         </View>
       ))}
 
-      <Pressable onPress={addBlock} style={styles.addButton}>
+      <Pressable
+        style={[styles.addButton, { backgroundColor: colors.primary }]}
+        onPress={addBlock}
+      >
         <Text style={styles.addButtonText}>+ Agregar bloque</Text>
       </Pressable>
 
-      <Pressable onPress={handleSubmit} style={styles.submitButton} disabled={loading}>
+      <Pressable
+        style={[styles.submitButton, { backgroundColor: colors.primary }, loading && { backgroundColor: colors.disabledButton }]}
+        onPress={handleSubmit}
+        disabled={loading}
+      >
         {loading ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={colors.background} />
         ) : (
           <Text style={styles.submitButtonText}>Guardar Rutina</Text>
         )}
@@ -438,7 +546,6 @@ const styles = StyleSheet.create({
   container: {
     padding: 16,
     paddingBottom: 60,
-    backgroundColor: "#fff",
   },
   title: {
     fontSize: 28,
@@ -450,26 +557,26 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontWeight: "600",
     fontSize: 14,
-    color: "#444",
   },
   input: {
     borderWidth: 1,
-    borderColor: "#aaa",
     borderRadius: 8,
-    padding: 8,
+    padding: 10,
     marginTop: 6,
   },
   disabledInput: {
-    backgroundColor: "#e5e7eb",
-    color: "#444",
+    opacity: 0.7,
   },
   blockContainer: {
     marginTop: 24,
     padding: 12,
     borderWidth: 1,
-    borderColor: "#ddd",
     borderRadius: 12,
-    backgroundColor: "#fafafa",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   blockHeader: {
     flexDirection: "row",
@@ -484,16 +591,13 @@ const styles = StyleSheet.create({
     padding: 6,
   },
   removeButtonText: {
-    color: "#d00",
     fontWeight: "700",
   },
   exerciseContainer: {
     marginTop: 16,
-    padding: 8,
+    padding: 10,
     borderWidth: 1,
-    borderColor: "#ccc",
     borderRadius: 10,
-    backgroundColor: "#fff",
   },
   exerciseHeader: {
     flexDirection: "row",
@@ -507,23 +611,21 @@ const styles = StyleSheet.create({
   addButton: {
     marginTop: 12,
     padding: 10,
-    backgroundColor: "#3b82f6",
     borderRadius: 8,
     alignItems: "center",
   },
   addButtonText: {
-    color: "#fff",
+    color: "#ffffff",
     fontWeight: "700",
   },
   submitButton: {
     marginTop: 36,
     padding: 14,
-    backgroundColor: "#2563eb",
     borderRadius: 10,
     alignItems: "center",
   },
   submitButtonText: {
-    color: "#fff",
+    color: "#ffffff",
     fontSize: 16,
     fontWeight: "700",
   },
@@ -531,6 +633,11 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+  },
+  error: {
+    fontWeight: "bold",
+    marginBottom: 12,
+    textAlign: "center",
   },
   switchContainer: {
     flexDirection: "row",

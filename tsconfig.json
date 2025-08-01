@@ -1,17 +1,27 @@
 {
+  // Extiende la configuración base de Expo para incluir opciones predeterminadas
   "extends": "expo/tsconfig.base",
+  // Configuraciones adicionales del compilador
   "compilerOptions": {
+    // Activa todas las verificaciones estrictas de TypeScript (incluye noImplicitAny)
     "strict": true,
+    // Define la raíz para los alias de importación
+    "baseUrl": ".",
+    // Configura alias para importar módulos desde la raíz del proyecto
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"] // Ejemplo: @/context/AuthContext importa desde ./context/AuthContext
     }
   },
+  // Archivos y carpetas a incluir en la compilación
   "include": [
-    "**/*.ts",
-    "**/*.tsx",
-    ".expo/types/**/*.ts",
-    "expo-env.d.ts"
+    "**/*.ts", // Todos los archivos TypeScript
+    "**/*.tsx", // Todos los archivos TypeScript con JSX
+    ".expo/types/**/*.ts", // Tipos generados por Expo
+    "expo-env.d.ts" // Definiciones de entorno de Expo
+  ],
+  // Archivos y carpetas a excluir de la compilación
+  "exclude": [
+    "node_modules", // Evita procesar dependencias
+    "babel.config.js" // Excluye el archivo de configuración de Babel
   ]
 }

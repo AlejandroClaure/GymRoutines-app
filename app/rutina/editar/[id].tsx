@@ -1,3 +1,4 @@
+// app/rutina/editar/[id].tsx
 import React, { useEffect, useState } from "react";
 import {
   View,
@@ -13,11 +14,12 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { supabase } from "@/lib/supabase";
 import { updateRoutineWithBlocks } from "@/lib/supabaseService";
-import { v4 as uuidv4 } from "uuid"; // Importar uuid para generar IDs
+import { v4 as uuidv4 } from "uuid";
+import { useAuth } from "@/context/AuthContext";
+import { useTheme } from "@/context/ThemeContext";
 
-// Definición de interfaces para ejercicios y bloques
 interface Exercise {
-  id: string; // Ahora id es obligatorio
+  id: string;
   name: string;
   order: number;
   duration?: number;
@@ -26,7 +28,7 @@ interface Exercise {
 }
 
 interface Block {
-  id: string; // Ahora id es obligatorio
+  id: string;
   title: string;
   order: number;
   repeat: string;
@@ -37,8 +39,9 @@ interface Block {
 export default function EditRoutineScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
+  const { session } = useAuth();
+  const { resolvedTheme, isThemeLoading } = useTheme();
 
-  // Estados para los datos de la rutina
   const [routineName, setRoutineName] = useState("");
   const [style, setStyle] = useState("");
   const [level, setLevel] = useState("");
@@ -49,32 +52,54 @@ export default function EditRoutineScreen() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Función para restringir input a solo números
+  const colors = {
+    background: resolvedTheme === "dark" ? "#0f172a" : "#ffffff",
+    card: resolvedTheme === "dark" ? "#1e293b" : "#f9fafb",
+    text: resolvedTheme === "dark" ? "#e5e7eb" : "#111827",
+    textSecondary: resolvedTheme === "dark" ? "#9ca3af" : "#6b7280",
+    inputBorder: resolvedTheme === "dark" ? "#4b5563" : "#d1d5db",
+    disabledInput: resolvedTheme === "dark" ? "#374151" : "#e5e7eb",
+    error: "#ef4444",
+    primary: "#3b82f6",
+    destructive: "#ef4444",
+    disabledButton: resolvedTheme === "dark" ? "#6b7280" : "#93c5fd",
+  };
+
   const restrictToNumbers = (text: string) => {
     return text.replace(/[^0-9]/g, "");
   };
 
-  // Efecto para cargar los datos de la rutina
   useEffect(() => {
-    console.log("🧪 Iniciando carga de datos para rutina con ID:", id);
     if (!id) {
       console.log("❌ ID no proporcionado");
       setError("No se proporcionó un ID de rutina.");
       return;
     }
 
+    if (!session) {
+      console.log("❌ No hay sesión activa");
+      setError("Debes estar logueado para editar una rutina.");
+      return;
+    }
+
     const fetchData = async () => {
       setLoading(true);
       try {
-        console.log("📡 Obteniendo datos de la rutina...");
+        console.log("📡 Obteniendo datos de la rutina con ID:", id);
         const { data: routineData, error: routineError } = await supabase
           .from("routines")
           .select("name, style, level, duration, rest_between_exercises, rest_between_blocks")
           .eq("id", id)
+          .eq("user_id", session.user.id)
           .single();
 
         if (routineError || !routineData) {
-          console.log("❌ Error al cargar rutina:", routineError?.message || "No data");
+          console.error("❌ Error al cargar rutina:", {
+            message: routineError?.message,
+            details: routineError?.details,
+            hint: routineError?.hint,
+            code: routineError?.code,
+          });
           setError("No se pudo cargar la rutina.");
           return;
         }
@@ -95,7 +120,12 @@ export default function EditRoutineScreen() {
           .order("order", { ascending: true });
 
         if (blockError || !blockData) {
-          console.log("❌ Error al cargar bloques:", blockError?.message || "No data");
+          console.error("❌ Error al cargar bloques:", {
+            message: blockError?.message,
+            details: blockError?.details,
+            hint: blockError?.hint,
+            code: blockError?.code,
+          });
           setError("No se pudieron cargar los bloques.");
           return;
         }
@@ -110,7 +140,12 @@ export default function EditRoutineScreen() {
           .order("order", { ascending: true });
 
         if (exerciseError || !exerciseData) {
-          console.log("❌ Error al cargar ejercicios:", exerciseError?.message || "No data");
+          console.error("❌ Error al cargar ejercicios:", {
+            message: exerciseError?.message,
+            details: exerciseError?.details,
+            hint: exerciseError?.hint,
+            code: exerciseError?.code,
+          });
           setError("No se pudieron cargar los ejercicios.");
           return;
         }
@@ -136,8 +171,13 @@ export default function EditRoutineScreen() {
 
         setBlocks(blocksWithExercises);
         console.log("✅ Datos combinados y estados actualizados");
-      } catch (e) {
-        console.error("❌ Error inesperado al cargar datos:", e);
+      } catch (e: any) {
+        console.error("❌ Error inesperado al cargar datos:", {
+          message: e.message,
+          details: e.details,
+          hint: e.hint,
+          code: e.code,
+        });
         setError("Error inesperado al cargar los datos.");
       } finally {
         setLoading(false);
@@ -146,9 +186,8 @@ export default function EditRoutineScreen() {
     };
 
     fetchData();
-  }, [id]);
+  }, [id, session]);
 
-  // Función para actualizar un bloque
   const updateBlock = (index: number, changes: Partial<Block>) => {
     setBlocks((prev) => {
       const copy = [...prev];
@@ -170,12 +209,10 @@ export default function EditRoutineScreen() {
     });
   };
 
-  // Función para eliminar un bloque
   const removeBlock = (index: number) => {
     setBlocks((prev) => prev.filter((_, i) => i !== index).map((block, i) => ({ ...block, order: i + 1 })));
   };
 
-  // Función para agregar un nuevo bloque
   const addBlock = () => {
     setBlocks((prev) => [
       ...prev,
@@ -190,7 +227,6 @@ export default function EditRoutineScreen() {
     ]);
   };
 
-  // Función para agregar un ejercicio a un bloque
   const addExercise = (blockIndex: number) => {
     setBlocks((prev) => {
       const copy = [...prev];
@@ -209,7 +245,6 @@ export default function EditRoutineScreen() {
     });
   };
 
-  // Función para eliminar un ejercicio
   const removeExercise = (blockIndex: number, exIndex: number) => {
     setBlocks((prev) => {
       const copy = [...prev];
@@ -222,7 +257,6 @@ export default function EditRoutineScreen() {
     });
   };
 
-  // Función para actualizar un ejercicio
   const updateExercise = (blockIndex: number, exIndex: number, changes: Partial<Exercise>) => {
     setBlocks((prev) => {
       const copy = [...prev];
@@ -234,7 +268,6 @@ export default function EditRoutineScreen() {
     });
   };
 
-  // Función para validar los datos
   const validate = (): boolean => {
     console.log("🔍 Iniciando validación de datos...");
     if (!routineName.trim()) {
@@ -309,12 +342,11 @@ export default function EditRoutineScreen() {
     return true;
   };
 
-  // Función para guardar los cambios
   const handleSave = async () => {
     console.log("🧨 Iniciando guardado de rutina con ID:", id);
-    if (!validate() || !id) {
-      console.log("❌ Guardado detenido: Validación fallida o ID no proporcionado");
-      Alert.alert("Error", "No se puede guardar debido a datos inválidos o falta de ID.");
+    if (!validate() || !id || !session) {
+      console.log("❌ Guardado detenido: Validación fallida, ID no proporcionado o no hay sesión");
+      Alert.alert("Error", "No se puede guardar debido a datos inválidos, falta de ID o sesión.");
       return;
     }
 
@@ -344,16 +376,8 @@ export default function EditRoutineScreen() {
         })),
       };
 
-      const sessionResponse = await supabase.auth.getSession();
-      if (!sessionResponse.data.session) {
-        console.log("❌ No hay sesión activa");
-        Alert.alert("Error", "Debes estar logueado para guardar la rutina.");
-        return;
-      }
-
-      const userId = sessionResponse.data.session.user.id;
-      console.log("📡 Llamando a updateRoutineWithBlocks con userId:", userId);
-      const success = await updateRoutineWithBlocks(userId, id, routineToUpdate);
+      console.log("📡 Llamando a updateRoutineWithBlocks con userId:", session.user.id);
+      const success = await updateRoutineWithBlocks(session.user.id, id, routineToUpdate);
       if (success) {
         console.log("✅ Rutina actualizada correctamente");
         Alert.alert("Éxito", "La rutina se guardó correctamente.");
@@ -363,7 +387,12 @@ export default function EditRoutineScreen() {
         Alert.alert("Error", "No se pudo actualizar la rutina.");
       }
     } catch (e: any) {
-      console.error("❌ Error al guardar la rutina:", e);
+      console.error("❌ Error al guardar la rutina:", {
+        message: e.message,
+        details: e.details,
+        hint: e.hint,
+        code: e.code,
+      });
       Alert.alert("Error", `Hubo un error al guardar la rutina: ${e.message || "Desconocido"}`);
     } finally {
       setLoading(false);
@@ -371,86 +400,92 @@ export default function EditRoutineScreen() {
     }
   };
 
-  // Mostrar pantalla de carga
-  if (loading) {
+  if (loading || isThemeLoading) {
     return (
-      <View style={styles.centered}>
-        <ActivityIndicator size="large" color="#3b82f6" />
+      <View style={[styles.centered, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
-  // Renderizado principal
   return (
-    <ScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Editar Rutina</Text>
-      {error && <Text style={styles.error}>{error}</Text>}
+    <ScrollView contentContainerStyle={[styles.container, { backgroundColor: colors.background }]}>
+      <Text style={[styles.title, { color: colors.text }]}>Editar Rutina</Text>
+      {error && <Text style={[styles.error, { color: colors.error }]}>{error}</Text>}
 
-      <Text style={styles.label}>Nombre *</Text>
+      <Text style={[styles.label, { color: colors.textSecondary }]}>Nombre *</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.card, color: colors.text }]}
         placeholder="Nombre de la rutina"
+        placeholderTextColor={colors.textSecondary}
         value={routineName}
         onChangeText={setRoutineName}
       />
 
-      <Text style={styles.label}>Estilo</Text>
+      <Text style={[styles.label, { color: colors.textSecondary }]}>Estilo</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.card, color: colors.text }]}
         placeholder="Ej: Fuerza, Cardio, HIIT..."
+        placeholderTextColor={colors.textSecondary}
         value={style}
         onChangeText={setStyle}
       />
 
-      <Text style={styles.label}>Nivel</Text>
+      <Text style={[styles.label, { color: colors.textSecondary }]}>Nivel</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.card, color: colors.text }]}
         placeholder="Ej: Principiante, Intermedio, Avanzado"
+        placeholderTextColor={colors.textSecondary}
         value={level}
         onChangeText={setLevel}
       />
 
-      <Text style={styles.label}>Duración (minutos)</Text>
+      <Text style={[styles.label, { color: colors.textSecondary }]}>Duración (minutos)</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.card, color: colors.text }]}
         placeholder="Duración total estimada"
+        placeholderTextColor={colors.textSecondary}
         keyboardType="numeric"
         value={duration}
         onChangeText={(text) => setDuration(restrictToNumbers(text))}
       />
 
-      <Text style={styles.label}>Descanso entre ejercicios (segundos)</Text>
+      <Text style={[styles.label, { color: colors.textSecondary }]}>Descanso entre ejercicios (segundos)</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.card, color: colors.text }]}
         placeholder="Ej: 20"
+        placeholderTextColor={colors.textSecondary}
         keyboardType="numeric"
         value={restBetweenExercises}
         onChangeText={(text) => setRestBetweenExercises(restrictToNumbers(text))}
       />
 
-      <Text style={styles.label}>Descanso entre bloques (segundos)</Text>
+      <Text style={[styles.label, { color: colors.textSecondary }]}>Descanso entre bloques (segundos)</Text>
       <TextInput
-        style={styles.input}
+        style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.card, color: colors.text }]}
         placeholder="Ej: 60"
+        placeholderTextColor={colors.textSecondary}
         keyboardType="numeric"
         value={restBetweenBlocks}
         onChangeText={(text) => setRestBetweenBlocks(restrictToNumbers(text))}
       />
 
-      {/* Bloques dinámicos */}
       {blocks.map((block, blockIndex) => (
-        <View key={block.id} style={styles.blockContainer}>
+        <View
+          key={block.id}
+          style={[styles.blockContainer, { backgroundColor: colors.card, borderColor: colors.inputBorder }]}
+        >
           <View style={styles.blockHeader}>
-            <Text style={styles.blockTitle}>Bloque {blockIndex + 1}</Text>
+            <Text style={[styles.blockTitle, { color: colors.text }]}>Bloque {blockIndex + 1}</Text>
             {blocks.length > 1 && (
               <Pressable onPress={() => removeBlock(blockIndex)} style={styles.removeButton}>
-                <Text style={styles.removeButtonText}>Eliminar bloque</Text>
+                <Text style={[styles.removeButtonText, { color: colors.destructive }]}>Eliminar bloque</Text>
               </Pressable>
             )}
           </View>
 
           <View style={styles.switchContainer}>
-            <Text style={styles.label}>¿Es bloque de preparación?</Text>
+            <Text style={[styles.label, { color: colors.textSecondary }]}>¿Es bloque de preparación?</Text>
             <Switch
               value={block.is_preparation}
               onValueChange={(value) => {
@@ -471,22 +506,40 @@ export default function EditRoutineScreen() {
                     : block.exercises,
                 });
               }}
+              trackColor={{ false: colors.textSecondary, true: colors.primary }}
+              thumbColor={colors.background}
             />
           </View>
 
-          <Text style={styles.label}>Título</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Título</Text>
           <TextInput
-            style={[styles.input, block.is_preparation && styles.disabledInput]}
+            style={[
+              styles.input,
+              {
+                borderColor: colors.inputBorder,
+                backgroundColor: block.is_preparation ? colors.disabledInput : colors.card,
+                color: colors.text,
+              },
+            ]}
             placeholder="Título del bloque"
+            placeholderTextColor={colors.textSecondary}
             value={block.title}
             onChangeText={(text) => updateBlock(blockIndex, { title: text })}
             editable={!block.is_preparation}
           />
 
-          <Text style={styles.label}>Repeticiones</Text>
+          <Text style={[styles.label, { color: colors.textSecondary }]}>Repeticiones</Text>
           <TextInput
-            style={[styles.input, block.is_preparation && styles.disabledInput]}
+            style={[
+              styles.input,
+              {
+                borderColor: colors.inputBorder,
+                backgroundColor: block.is_preparation ? colors.disabledInput : colors.card,
+                color: colors.text,
+              },
+            ]}
             placeholder="Ej: 1"
+            placeholderTextColor={colors.textSecondary}
             keyboardType="numeric"
             value={block.repeat}
             onChangeText={(text) => updateBlock(blockIndex, { repeat: restrictToNumbers(text) })}
@@ -494,9 +547,12 @@ export default function EditRoutineScreen() {
           />
 
           {block.exercises.map((ex, exIndex) => (
-            <View key={ex.id} style={styles.exerciseContainer}>
+            <View
+              key={ex.id}
+              style={[styles.exerciseContainer, { backgroundColor: colors.card, borderColor: colors.inputBorder }]}
+            >
               <View style={styles.exerciseHeader}>
-                <Text style={styles.exerciseTitle}>
+                <Text style={[styles.exerciseTitle, { color: colors.text }]}>
                   {block.is_preparation ? "Título" : `Ejercicio ${exIndex + 1}`}
                 </Text>
                 {!block.is_preparation && block.exercises.length > 1 && (
@@ -504,22 +560,24 @@ export default function EditRoutineScreen() {
                     onPress={() => removeExercise(blockIndex, exIndex)}
                     style={styles.removeButton}
                   >
-                    <Text style={styles.removeButtonText}>Eliminar ejercicio</Text>
+                    <Text style={[styles.removeButtonText, { color: colors.destructive }]}>Eliminar ejercicio</Text>
                   </Pressable>
                 )}
               </View>
 
               <TextInput
-                style={styles.input}
+                style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.card, color: colors.text }]}
                 placeholder={block.is_preparation ? "Preparen los elementos" : "Nombre del ejercicio"}
+                placeholderTextColor={colors.textSecondary}
                 value={ex.name}
                 onChangeText={(text) => updateExercise(blockIndex, exIndex, { name: text })}
               />
 
-              <Text style={styles.label}>Duración (segundos)</Text>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>Duración (segundos)</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.card, color: colors.text }]}
                 placeholder="Ej: 30"
+                placeholderTextColor={colors.textSecondary}
                 keyboardType="numeric"
                 value={ex.duration?.toString() || ""}
                 onChangeText={(text) => {
@@ -532,10 +590,11 @@ export default function EditRoutineScreen() {
 
               {!block.is_preparation && (
                 <>
-                  <Text style={styles.label}>Repeticiones</Text>
+                  <Text style={[styles.label, { color: colors.textSecondary }]}>Repeticiones</Text>
                   <TextInput
-                    style={styles.input}
+                    style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.card, color: colors.text }]}
                     placeholder="Ej: 15"
+                    placeholderTextColor={colors.textSecondary}
                     keyboardType="numeric"
                     value={ex.reps?.toString() || ""}
                     onChangeText={(text) => {
@@ -548,10 +607,11 @@ export default function EditRoutineScreen() {
                 </>
               )}
 
-              <Text style={styles.label}>Equipo</Text>
+              <Text style={[styles.label, { color: colors.textSecondary }]}>Equipo</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, { borderColor: colors.inputBorder, backgroundColor: colors.card, color: colors.text }]}
                 placeholder="Ej: Mancuernas, Barra..."
+                placeholderTextColor={colors.textSecondary}
                 value={ex.equipment || ""}
                 onChangeText={(text) => updateExercise(blockIndex, exIndex, { equipment: text })}
               />
@@ -559,24 +619,30 @@ export default function EditRoutineScreen() {
           ))}
 
           {!block.is_preparation && (
-            <Pressable style={styles.addButton} onPress={() => addExercise(blockIndex)}>
+            <Pressable
+              style={[styles.addButton, { backgroundColor: colors.primary }]}
+              onPress={() => addExercise(blockIndex)}
+            >
               <Text style={styles.addButtonText}>+ Agregar ejercicio</Text>
             </Pressable>
           )}
         </View>
       ))}
 
-      <Pressable style={styles.addButton} onPress={addBlock}>
+      <Pressable
+        style={[styles.addButton, { backgroundColor: colors.primary }]}
+        onPress={addBlock}
+      >
         <Text style={styles.addButtonText}>+ Agregar bloque</Text>
       </Pressable>
 
       <Pressable
-        style={[styles.submitButton, loading && styles.disabledButton]}
+        style={[styles.submitButton, { backgroundColor: colors.primary }, loading && { backgroundColor: colors.disabledButton }]}
         onPress={handleSave}
         disabled={loading}
       >
         {loading ? (
-          <ActivityIndicator color="#fff" />
+          <ActivityIndicator color={colors.background} />
         ) : (
           <Text style={styles.submitButtonText}>Guardar Cambios</Text>
         )}
@@ -585,28 +651,23 @@ export default function EditRoutineScreen() {
   );
 }
 
-// Estilos para la interfaz de usuario
 const styles = StyleSheet.create({
   container: {
     padding: 16,
     paddingBottom: 60,
-    backgroundColor: "#fff",
   },
   centered: {
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
-    backgroundColor: "#fff",
   },
   title: {
     fontSize: 28,
     fontWeight: "bold",
     marginBottom: 24,
     textAlign: "center",
-    color: "#111827",
   },
   error: {
-    color: "#dc2626",
     fontWeight: "bold",
     marginBottom: 12,
     textAlign: "center",
@@ -615,27 +676,26 @@ const styles = StyleSheet.create({
     marginTop: 12,
     fontWeight: "600",
     fontSize: 14,
-    color: "#444",
   },
   input: {
     borderWidth: 1,
-    borderColor: "#aaa",
     borderRadius: 8,
     padding: 10,
     marginTop: 6,
-    backgroundColor: "#fff",
   },
   disabledInput: {
-    backgroundColor: "#e5e7eb",
-    color: "#444",
+    opacity: 0.7,
   },
   blockContainer: {
     marginTop: 24,
     padding: 12,
     borderWidth: 1,
-    borderColor: "#ddd",
     borderRadius: 12,
-    backgroundColor: "#fafafa",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 2,
   },
   blockHeader: {
     flexDirection: "row",
@@ -645,15 +705,12 @@ const styles = StyleSheet.create({
   blockTitle: {
     fontWeight: "700",
     fontSize: 18,
-    color: "#111827",
   },
   exerciseContainer: {
     marginTop: 16,
     padding: 10,
     borderWidth: 1,
-    borderColor: "#ccc",
     borderRadius: 10,
-    backgroundColor: "#fff",
   },
   exerciseHeader: {
     flexDirection: "row",
@@ -663,40 +720,36 @@ const styles = StyleSheet.create({
   exerciseTitle: {
     fontWeight: "600",
     fontSize: 16,
-    color: "#111827",
   },
   removeButton: {
     padding: 6,
   },
   removeButtonText: {
-    color: "#d00",
     fontWeight: "700",
   },
   addButton: {
     marginTop: 12,
     padding: 10,
-    backgroundColor: "#3b82f6",
     borderRadius: 8,
     alignItems: "center",
   },
   addButtonText: {
-    color: "#fff",
+    color: "#ffffff",
     fontWeight: "700",
   },
   submitButton: {
     marginTop: 36,
     padding: 14,
-    backgroundColor: "#2563eb",
     borderRadius: 10,
     alignItems: "center",
   },
   submitButtonText: {
-    color: "#fff",
+    color: "#ffffff",
     fontSize: 16,
     fontWeight: "700",
   },
   disabledButton: {
-    backgroundColor: "#93c5fd",
+    opacity: 0.7,
   },
   switchContainer: {
     flexDirection: "row",
