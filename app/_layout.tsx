@@ -3,7 +3,6 @@ import {
   DrawerContentScrollView,
   DrawerItem,
   DrawerContentComponentProps,
-  
 } from "@react-navigation/drawer";
 import { useFonts } from "expo-font";
 import { Stack, useLocalSearchParams } from "expo-router";
@@ -20,13 +19,13 @@ import {
 } from "react-native";
 import { Feather, FontAwesome, FontAwesome5 } from "@expo/vector-icons";
 import { useAuth, AuthProvider } from "@/context/AuthContext";
-import { ThemeProvider, useTheme } from "@/context/ThemeContext"; // Import custom ThemeProvider and useTheme
+import { ThemeProvider, useTheme } from "@/context/ThemeContext";
 import { Analytics } from "@vercel/analytics/react";
 import Head from "expo-router/head";
 import {
   DarkTheme,
   DefaultTheme,
-  ThemeProvider as NavigationThemeProvider, 
+  ThemeProvider as NavigationThemeProvider,
   useNavigation,
 } from "@react-navigation/native";
 
@@ -45,7 +44,7 @@ type RootDrawerParamList = {
 // Componente para el botón de menú en el header
 const HeaderLeft = () => {
   const navigation = useNavigation<DrawerNavigationProp<RootDrawerParamList>>();
-  const { resolvedTheme } = useTheme();
+  const { resolvedTheme = "dark" } = useTheme(); // Valor por defecto: dark
   const colors = {
     icon: resolvedTheme === "dark" ? "#e5e7eb" : "#111827",
   };
@@ -62,7 +61,7 @@ const HeaderLeft = () => {
 // Componente auxiliar para el título del header de rutina/reproducir/[id]
 const RoutinePlayerHeaderTitle = () => {
   const { routineName } = useLocalSearchParams();
-  const { resolvedTheme } = useTheme();
+  const { resolvedTheme = "dark" } = useTheme(); // Valor por defecto: dark
   const colors = {
     text: resolvedTheme === "dark" ? "#e5e7eb" : "#111827",
   };
@@ -90,19 +89,45 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <ThemeProvider>
-        <AppNavigator />
-        <AppFooter />
-        <Analytics />
-        <StatusBar style="auto" />
+        <View style={styles.rootContainer}>
+          <RootContent />
+          <Analytics />
+          <StatusBar style="light" /> {/* Estilo claro para modo oscuro */}
+        </View>
       </ThemeProvider>
     </AuthProvider>
+  );
+}
+
+// Componente separado para manejar el contenido del layout
+function RootContent() {
+  const { isThemeLoading } = useTheme();
+  const { session } = useAuth();
+
+  // Fondo por defecto mientras el tema carga
+  const defaultBackground = isThemeLoading ? "#0f172a" : undefined;
+
+  // Mostrar pantalla de carga si el tema está cargando
+  if (isThemeLoading) {
+    return (
+      <View style={[styles.centered, { backgroundColor: defaultBackground }]}>
+        <Text style={styles.loadingText}>Cargando...</Text>
+      </View>
+    );
+  }
+
+  return (
+    <>
+      <AppNavigator />
+      {session && <AppFooter />} {/* Renderizar footer solo si hay sesión y tema cargado */}
+    </>
   );
 }
 
 // Definimos el componente de navegación
 function AppNavigator() {
   const { session, signOut } = useAuth();
-  const { resolvedTheme, isThemeLoading } = useTheme();
+  const { resolvedTheme = "dark", isThemeLoading } = useTheme(); // Valor por defecto: dark
 
   const colors = {
     headerBackground: resolvedTheme === "dark" ? "#0f172a" : "#f9fafb",
@@ -161,14 +186,6 @@ function AppNavigator() {
           }}
         />
       </Stack>
-    );
-  }
-
-  if (isThemeLoading) {
-    return (
-      <View style={[styles.centered, { backgroundColor: colors.headerBackground }]}>
-        <Text style={{ color: colors.text }}>Cargando...</Text>
-      </View>
     );
   }
 
@@ -425,17 +442,17 @@ function AppNavigator() {
 
 // Componente del pie de página (footer) de la aplicación
 function AppFooter() {
-  // Obtenemos el tema actual (claro u oscuro) desde el contexto de ThemeContext
-  const { resolvedTheme } = useTheme();
+  // Obtenemos el tema actual, usando "dark" como valor por defecto
+  const { resolvedTheme = "dark" } = useTheme();
 
   // Definimos los colores según el tema para mantener consistencia visual
   const colors = {
-    background: resolvedTheme === "dark" ? "#0f172a" : "#f1f5f9", // Fondo oscuro o claro (ligeramente más oscuro en modo claro para reducir el brillo)
-    border: resolvedTheme === "dark" ? "#374151" : "#d1d5db", // Color del borde superior del footer
-    text: resolvedTheme === "dark" ? "#9ca3af" : "#4b5563", // Color del texto, más oscuro en modo claro para mejor legibilidad
-    link: "#3b82f6", // Color del enlace (azul consistente en ambos temas)
-    icon: resolvedTheme === "dark" ? "#e5e7eb" : "#1f2937", // Color de los íconos, más oscuro en modo claro para mejor contraste
-    iconWrapper: resolvedTheme === "dark" ? "#1f2937" : "#e2e8f0", // Fondo del contenedor de íconos, ajustado para contraste
+    background: resolvedTheme === "dark" ? "#0f172a" : "#f1f5f9", // Fondo oscuro o claro
+    border: resolvedTheme === "dark" ? "#374151" : "#d1d5db", // Color del borde superior
+    text: resolvedTheme === "dark" ? "#9ca3af" : "#4b5563", // Texto legible
+    link: "#3b82f6", // Color del enlace
+    icon: resolvedTheme === "dark" ? "#e5e7eb" : "#1f2937", // Íconos con contraste
+    iconWrapper: resolvedTheme === "dark" ? "#1f2937" : "#e2e8f0", // Fondo del contenedor de íconos
   };
 
   return (
@@ -453,24 +470,20 @@ function AppFooter() {
       </Text>
       {/* Contenedor para los íconos de redes sociales */}
       <View style={styles.socialContainer}>
-        {/* Contenedor del ícono de GitHub con sombra para mejor definición */}
+        {/* Contenedor del ícono de GitHub con sombra */}
         <View style={[styles.socialIconWrapper, { backgroundColor: colors.iconWrapper, shadowColor: resolvedTheme === "dark" ? "#000" : "#6b7280" }]}>
           <Pressable
             onPress={() => Linking.openURL("https://github.com/AlejandroClaure")}
-            style={({ pressed }) => [
-              { opacity: pressed ? 0.7 : 1 }, // Efecto de opacidad al presionar
-            ]}
+            style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
           >
             <FontAwesome name="github" size={20} color={colors.icon} />
           </Pressable>
         </View>
-        {/* Contenedor del ícono de Discord con sombra para mejor definición */}
+        {/* Contenedor del ícono de Discord con sombra */}
         <View style={[styles.socialIconWrapper, { backgroundColor: colors.iconWrapper, shadowColor: resolvedTheme === "dark" ? "#000" : "#6b7280" }]}>
           <Pressable
             onPress={() => Linking.openURL("https://discord.gg/x5J45spu")}
-            style={({ pressed }) => [
-              { opacity: pressed ? 0.7 : 1 }, // Efecto de opacidad al presionar
-            ]}
+            style={({ pressed }) => [{ opacity: pressed ? 0.7 : 1 }]}
           >
             <FontAwesome5 name="discord" size={20} color={colors.icon} />
           </Pressable>
@@ -482,11 +495,22 @@ function AppFooter() {
 
 // Definimos los estilos para el layout de la aplicación
 const styles = StyleSheet.create({
-  // Estilo para centrar contenido en pantallas de carga u otros contenedores
+  // Estilo para el contenedor raíz de la aplicación
+  rootContainer: {
+    flex: 1, // Ocupa todo el espacio disponible
+    backgroundColor: "#0f172a", // Fondo oscuro por defecto
+  },
+  // Estilo para centrar contenido en pantallas de carga
   centered: {
     flex: 1, // Ocupa todo el espacio disponible
     justifyContent: "center", // Centra verticalmente
     alignItems: "center", // Centra horizontalmente
+    backgroundColor: "#0f172a", // Fondo oscuro para la pantalla de carga
+  },
+  // Estilo para el texto de carga
+  loadingText: {
+    fontSize: 16, // Tamaño de fuente
+    color: "#e5e7eb", // Color claro para modo oscuro
   },
   // Estilo para el contenedor del pie de página (footer)
   footer: {

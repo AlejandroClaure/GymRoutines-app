@@ -2,16 +2,13 @@
 import React, { createContext, useContext, useEffect, useState } from "react";
 import { Appearance } from "react-native";
 import { useAuth } from "./AuthContext";
-import { upsertThemePreference, getThemePreference } from "@/lib/supabaseService";
-
-// Tipos válidos para el tema
-type ThemeOption = "light" | "dark" | "system";
+import { upsertThemePreference, getThemePreference, ThemeOption } from "@/lib/supabaseService";
 
 interface ThemeContextType {
   theme: ThemeOption;
   resolvedTheme: "light" | "dark";
   setTheme: (theme: ThemeOption) => Promise<void>;
-  isThemeLoading: boolean; // Añadir esta propiedad
+  isThemeLoading: boolean;
 }
 
 // Crear contexto con valores iniciales
@@ -20,42 +17,45 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 // Proveedor del contexto
 export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
   const { session } = useAuth();
-  const [theme, setThemeState] = useState<ThemeOption>("system");
-  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">(
-    Appearance.getColorScheme() ?? "light"
-  );
-  const [isThemeLoading, setIsThemeLoading] = useState(true); // Añadir estado para isThemeLoading
+  const [theme, setThemeState] = useState<ThemeOption>("dark"); // Tema por defecto: dark
+  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("dark"); // Tema resuelto por defecto: dark
+  const [isThemeLoading, setIsThemeLoading] = useState(true);
 
   // Cargar la preferencia de tema desde Supabase
   useEffect(() => {
     const loadThemePreference = async () => {
       if (!session?.user.id) {
-        console.log("No hay usuario autenticado, usando tema por defecto: system");
-        setIsThemeLoading(false); // Marcar carga como completa
+        console.log("No hay usuario autenticado, usando tema por defecto: dark");
+        setIsThemeLoading(false);
         return;
       }
       try {
         console.log("Cargando preferencia de tema para usuario:", session.user.id);
         const stored = await getThemePreference(session.user.id);
-        if (stored === "light" || stored === "dark" || stored === "system") {
+        if (stored) {
           console.log("Tema cargado desde Supabase:", stored);
           setThemeState(stored);
         } else {
-          console.log("No se encontró tema válido, usando por defecto: system");
+          console.log("No se encontró tema válido, usando por defecto: dark");
         }
-      } catch (error) {
-        console.error("Error al cargar la preferencia de tema:", error);
+      } catch (error: any) {
+        console.error("Error al cargar la preferencia de tema:", {
+          message: error.message,
+          details: error.details,
+          hint: error.hint,
+          code: error.code,
+        });
       } finally {
-        setIsThemeLoading(false); // Marcar carga como completa
+        setIsThemeLoading(false);
       }
     };
     loadThemePreference();
   }, [session?.user.id]);
 
-  // Actualizar el tema resuelto según el tema seleccionado o el sistema
+  // Actualizar el tema resuelto según el tema seleccionado
   useEffect(() => {
     const updateResolvedTheme = () => {
-      const systemColorScheme = Appearance.getColorScheme() ?? "light";
+      const systemColorScheme = Appearance.getColorScheme() ?? "dark";
       console.log("Actualizando tema resuelto. Tema seleccionado:", theme, "Esquema del sistema:", systemColorScheme);
       setResolvedTheme(theme === "system" ? systemColorScheme : theme);
     };
@@ -72,13 +72,21 @@ export const ThemeProvider = ({ children }: { children: React.ReactNode }) => {
       setThemeState(newTheme); // Actualizar el estado local inmediatamente
       if (session?.user.id) {
         console.log("Guardando tema en Supabase para usuario:", session.user.id);
-        await upsertThemePreference(session.user.id, newTheme);
-        console.log("Tema guardado exitosamente en Supabase.");
+        const success = await upsertThemePreference(session.user.id, newTheme);
+        if (!success) {
+          throw new Error("No se pudo guardar el tema en Supabase");
+        }
+        console.log("✅ Tema guardado exitosamente en Supabase.");
       } else {
         console.warn("No hay usuario autenticado para guardar el tema.");
       }
-    } catch (error) {
-      console.error("Error al guardar el tema en Supabase:", error);
+    } catch (error: any) {
+      console.error("❌ Error al guardar el tema en Supabase:", {
+        message: error.message,
+        details: error.details,
+        hint: error.hint,
+        code: error.code,
+      });
       throw error; // Lanzar error para que el componente consumidor lo maneje
     }
   };
