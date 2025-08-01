@@ -423,19 +423,25 @@ function AppNavigator() {
   );
 }
 
+// Componente del pie de página (footer) de la aplicación
 function AppFooter() {
+  // Obtenemos el tema actual (claro u oscuro) desde el contexto de ThemeContext
   const { resolvedTheme } = useTheme();
+
+  // Definimos los colores según el tema para mantener consistencia visual
   const colors = {
-    background: resolvedTheme === "dark" ? "#0f172a" : "#f9fafb",
-    border: resolvedTheme === "dark" ? "#374151" : "#d1d5db",
-    text: resolvedTheme === "dark" ? "#9ca3af" : "#6b7280",
-    link: "#3b82f6",
-    icon: resolvedTheme === "dark" ? "#e5e7eb" : "#111827",
-    iconWrapper: resolvedTheme === "dark" ? "#1f2937" : "#e5e7eb",
+    background: resolvedTheme === "dark" ? "#0f172a" : "#f1f5f9", // Fondo oscuro o claro (ligeramente más oscuro en modo claro para reducir el brillo)
+    border: resolvedTheme === "dark" ? "#374151" : "#d1d5db", // Color del borde superior del footer
+    text: resolvedTheme === "dark" ? "#9ca3af" : "#4b5563", // Color del texto, más oscuro en modo claro para mejor legibilidad
+    link: "#3b82f6", // Color del enlace (azul consistente en ambos temas)
+    icon: resolvedTheme === "dark" ? "#e5e7eb" : "#1f2937", // Color de los íconos, más oscuro en modo claro para mejor contraste
+    iconWrapper: resolvedTheme === "dark" ? "#1f2937" : "#e2e8f0", // Fondo del contenedor de íconos, ajustado para contraste
   };
 
   return (
+    // Contenedor principal del footer con fondo y borde dinámicos
     <View style={[styles.footer, { backgroundColor: colors.background, borderTopColor: colors.border }]}>
+      {/* Texto del footer con información de copyright y enlace al desarrollador */}
       <Text style={[styles.footerText, { color: colors.text }]}>
         © {new Date().getFullYear()} Gym Routines — Desarrollado por{" "}
         <Text
@@ -445,17 +451,26 @@ function AppFooter() {
           AlejandroClaure
         </Text>
       </Text>
+      {/* Contenedor para los íconos de redes sociales */}
       <View style={styles.socialContainer}>
-        <View style={[styles.socialIconWrapper, { backgroundColor: colors.iconWrapper }]}>
+        {/* Contenedor del ícono de GitHub con sombra para mejor definición */}
+        <View style={[styles.socialIconWrapper, { backgroundColor: colors.iconWrapper, shadowColor: resolvedTheme === "dark" ? "#000" : "#6b7280" }]}>
           <Pressable
             onPress={() => Linking.openURL("https://github.com/AlejandroClaure")}
+            style={({ pressed }) => [
+              { opacity: pressed ? 0.7 : 1 }, // Efecto de opacidad al presionar
+            ]}
           >
             <FontAwesome name="github" size={20} color={colors.icon} />
           </Pressable>
         </View>
-        <View style={[styles.socialIconWrapper, { backgroundColor: colors.iconWrapper }]}>
+        {/* Contenedor del ícono de Discord con sombra para mejor definición */}
+        <View style={[styles.socialIconWrapper, { backgroundColor: colors.iconWrapper, shadowColor: resolvedTheme === "dark" ? "#000" : "#6b7280" }]}>
           <Pressable
             onPress={() => Linking.openURL("https://discord.gg/x5J45spu")}
+            style={({ pressed }) => [
+              { opacity: pressed ? 0.7 : 1 }, // Efecto de opacidad al presionar
+            ]}
           >
             <FontAwesome5 name="discord" size={20} color={colors.icon} />
           </Pressable>
@@ -465,43 +480,56 @@ function AppFooter() {
   );
 }
 
+// Definimos los estilos para el layout de la aplicación
 const styles = StyleSheet.create({
+  // Estilo para centrar contenido en pantallas de carga u otros contenedores
   centered: {
-    flex: 1,
-    justifyContent: "center",
-    alignItems: "center",
+    flex: 1, // Ocupa todo el espacio disponible
+    justifyContent: "center", // Centra verticalmente
+    alignItems: "center", // Centra horizontalmente
   },
+  // Estilo para el contenedor del pie de página (footer)
   footer: {
-    paddingVertical: 16,
-    paddingHorizontal: 24,
-    borderTopWidth: 1,
-    alignItems: "center",
-    justifyContent: "center",
+    paddingVertical: 16, // Espaciado vertical
+    paddingHorizontal: 24, // Espaciado horizontal
+    borderTopWidth: 1, // Borde superior de 1 píxel
+    alignItems: "center", // Centra los elementos horizontalmente
+    justifyContent: "center", // Centra los elementos verticalmente
   },
+  // Estilo para el texto del footer
   footerText: {
-    fontSize: 14,
-    marginBottom: 8,
-    textAlign: "center",
+    fontSize: 14, // Tamaño de fuente
+    marginBottom: 8, // Margen inferior para separar del contenedor de íconos
+    textAlign: "center", // Centra el texto
   },
+  // Estilo para los enlaces dentro del texto del footer
   link: {
-    textDecorationLine: "underline",
+    textDecorationLine: "underline", // Subrayado para indicar que es un enlace
   },
+  // Estilo para el contenedor de los íconos de redes sociales
   socialContainer: {
-    flexDirection: "row",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: 24,
+    flexDirection: "row", // Dispone los íconos en fila
+    justifyContent: "center", // Centra los íconos horizontalmente
+    alignItems: "center", // Centra los íconos verticalmente
+    gap: 24, // Espacio entre los íconos
   },
+  // Estilo para el contenedor de cada ícono social
   socialIconWrapper: {
-    padding: 8,
-    borderRadius: 12,
+    padding: 8, // Espaciado interno
+    borderRadius: 12, // Bordes redondeados
+    shadowOffset: { width: 0, height: 2 }, // Desplazamiento de la sombra
+    shadowOpacity: 0.1, // Opacidad de la sombra
+    shadowRadius: 4, // Radio de difuminado de la sombra
+    elevation: 3, // Elevación para sombra en Android
   },
+  // Estilo para el encabezado del drawer
   drawerHeader: {
-    padding: 16,
-    borderBottomWidth: 1,
+    padding: 16, // Espaciado interno
+    borderBottomWidth: 1, // Borde inferior de 1 píxel
   },
+  // Estilo para el texto del encabezado del drawer
   drawerHeaderText: {
-    fontSize: 20,
-    fontWeight: "bold",
+    fontSize: 20, // Tamaño de fuente
+    fontWeight: "bold", // Texto en negrita
   },
 });
