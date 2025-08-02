@@ -145,7 +145,7 @@ export default function HomeScreen() {
       await Clipboard.setStringAsync(shareCode);
       Alert.alert(
         "Código copiado",
-        `El código ${shareCode} ha sido copiado al portapapeles. Compártelo para que otros puedan importar la rutina. Válido por 5 minutos.`
+        `El código ${shareCode} ha sido copiado al portapapeles. Compártelo para que otros puedan importar la rutina. Válido por 7 días.`
       );
     } catch (e: any) {
       console.error("❌ Error al copiar al portapapeles:", {

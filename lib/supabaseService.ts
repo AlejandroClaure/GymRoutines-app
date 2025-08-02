@@ -493,7 +493,7 @@ export async function createRoutineShareCode(routineId: string): Promise<string 
     const { error } = await supabase.from("routine_shares").insert({
       routine_id: routineId,
       share_code: shareCode,
-      expires_at: new Date(Date.now() + 5 * 60 * 1000).toISOString(), // 5 minutos desde ahora
+      expires_at: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 días desde ahora
     });
 
     if (error) {

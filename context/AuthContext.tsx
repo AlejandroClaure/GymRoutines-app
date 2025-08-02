@@ -1,25 +1,25 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase"; // Cliente Supabase ya inicializado
-import * as AuthSession from "expo-auth-session"; // Manejo de sesiones de autenticación (OAuth)
-import * as WebBrowser from "expo-web-browser";   // Para abrir la pantalla de autenticación externa
-import { router } from "expo-router";             // Navegación entre pantallas
-import { Alert } from "react-native";             // Para mostrar alertas al usuario
+import { supabase } from "@/lib/supabase"; // Cliente Supabase ya inicializado para autenticación
+import * as AuthSession from "expo-auth-session"; // Biblioteca para manejar sesiones de autenticación OAuth
+import * as WebBrowser from "expo-web-browser"; // Para abrir el navegador para autenticación externa
+import { router } from "expo-router"; // Sistema de navegación para redirigir entre pantallas
+import { Alert } from "react-native"; // Componente para mostrar alertas al usuario
 
-// Tipo de sesión basado en el resultado del método getSession de Supabase
+// Definimos el tipo para la sesión basado en el resultado de getSession de Supabase
 type SessionType = Awaited<
   ReturnType<typeof supabase.auth.getSession>
 >["data"]["session"];
 
-// Definimos la forma del contexto de autenticación
+// Definimos la interfaz del contexto de autenticación
 interface AuthContextType {
-  session: SessionType | null;                 // Sesión actual (null si no hay sesión)
-  isLoading: boolean;                          // Estado de carga mientras se autentica
-  signInWithGoogle: () => Promise<void>;       // Función para iniciar sesión con Google
-  signOut: () => Promise<void>;                // Función para cerrar sesión
-  getAccessToken: () => Promise<string | null>;// Devuelve el token de acceso a la API de Google Fit
+  session: SessionType | null; // Sesión actual del usuario (null si no está autenticado)
+  isLoading: boolean; // Indica si se está procesando una operación de autenticación
+  signInWithGoogle: () => Promise<void>; // Función para iniciar sesión con Google
+  signOut: () => Promise<void>; // Función para cerrar sesión
+  getAccessToken: () => Promise<string | null>; // Obtiene el token de acceso para Google Fit
 }
 
-// Creamos el contexto con valores iniciales vacíos
+// Creamos el contexto de autenticación con valores iniciales vacíos
 const AuthContext = createContext<AuthContextType>({
   session: null,
   isLoading: false,
@@ -28,72 +28,81 @@ const AuthContext = createContext<AuthContextType>({
   getAccessToken: async () => null,
 });
 
-// Componente proveedor del contexto
+// Proveedor del contexto de autenticación
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  const [session, setSession] = useState<SessionType | null>(null); // Estado para la sesión
-  const [isLoading, setIsLoading] = useState(false);                // Estado de carga
+  // Estado para almacenar la sesión actual
+  const [session, setSession] = useState<SessionType | null>(null);
+  // Estado para indicar si se está cargando una operación de autenticación
+  const [isLoading, setIsLoading] = useState(false);
 
+  // Efecto para inicializar y mantener actualizada la sesión
   useEffect(() => {
-  // Completa la sesión de autenticación si se usó WebBrowser (evita sesiones colgadas)
-  WebBrowser.maybeCompleteAuthSession();
+    // Completa cualquier sesión de autenticación pendiente (por ejemplo, tras redirección OAuth)
+    WebBrowser.maybeCompleteAuthSession();
 
-  // Función asincrónica para inicializar o refrescar sesión
-  const initSession = async () => {
-    // Intentamos obtener la sesión actual almacenada localmente
-    const { data, error } = await supabase.auth.getSession();
-    let currentSession = data.session;
+    // Función para inicializar o refrescar la sesión
+    const initSession = async () => {
+      // Obtenemos la sesión actual almacenada localmente
+      const { data, error } = await supabase.auth.getSession();
+      let currentSession = data.session;
 
-    // Si no hay token del proveedor (Google), puede estar vencido o faltar
-    if (!currentSession?.provider_token) {
-      console.log("🔄 No hay provider_token, intentando refreshSession...");
-
-      // Intentamos refrescar la sesión usando el token de refresh de Supabase
-      const refreshResult = await supabase.auth.refreshSession();
-
-      if (refreshResult.error) {
-        // Si hay error al refrescar, mostramos advertencia y mantenemos sesión null
-        console.warn("⚠️ Error al refrescar la sesión:", refreshResult.error.message);
-      } else {
-        // Si se pudo refrescar, actualizamos la sesión con la nueva
-        currentSession = refreshResult.data.session;
-        console.log("✅ Sesión refrescada exitosamente.");
+      // Si hay un error al obtener la sesión, mostramos un mensaje
+      if (error) {
+        console.warn("⚠️ Error al obtener la sesión:", error.message);
       }
-    }
 
-    // Si luego de refrescar seguimos sin provider_token, cerramos sesión automáticamente
-    if (!currentSession?.provider_token) {
-      console.warn("❌ No se pudo obtener un provider_token válido. Cerrando sesión...");
-      await supabase.auth.signOut();
-      setSession(null);
-    } else {
-      // Si todo está bien, actualizamos el estado con la sesión activa
-      setSession(currentSession);
-    }
-  };
+      // Si no hay un provider_token (necesario para Google Fit), intentamos refrescar la sesión
+      if (!currentSession?.provider_token) {
+        console.log("🔄 No hay provider_token, intentando refreshSession...");
+        const refreshResult = await supabase.auth.refreshSession();
 
-  // Ejecutamos la función al montar el componente
-  initSession();
+        if (refreshResult.error) {
+          // Si falla el refresco, mostramos un mensaje de advertencia
+          console.warn("⚠️ Error al refrescar la sesión:", refreshResult.error.message);
+        } else {
+          // Si el refresco es exitoso, actualizamos la sesión
+          currentSession = refreshResult.data.session;
+          console.log("✅ Sesión refrescada exitosamente.");
+        }
+      }
 
-  // Suscripción a cambios de sesión (login/logout/refresh automático de Supabase)
-  const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
-    setSession(session);
-  });
+      // Si después de intentar refrescar no hay provider_token, cerramos la sesión
+      if (!currentSession?.provider_token) {
+        console.warn("❌ No se pudo obtener un provider_token válido. Cerrando sesión...");
+        await supabase.auth.signOut();
+        setSession(null);
+      } else {
+        // Si la sesión es válida, actualizamos el estado
+        setSession(currentSession);
+      }
+    };
 
-  // Limpieza al desmontar: quitamos la suscripción
-  return () => listener.subscription.unsubscribe();
-}, []);
+    // Ejecutamos la inicialización de la sesión
+    initSession();
 
+    // Suscribimos un listener para detectar cambios en el estado de autenticación
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setSession(session); // Actualizamos el estado con la nueva sesión
+      if (!session) {
+        console.log("🚪 Sesión cerrada, redirigiendo a /login");
+        router.replace("/login"); // Redirigimos al login si no hay sesión
+      }
+    });
 
-  // Función para iniciar sesión con Google (OAuth)
+    // Limpieza: desuscribimos el listener al desmontar el componente
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
+  // Función para iniciar sesión con Google usando OAuth
   const signInWithGoogle = async () => {
-    if (isLoading) return; // Evitamos múltiples inicios simultáneos
-    setIsLoading(true);
+    if (isLoading) return; // Evitamos múltiples inicios de sesión simultáneos
+    setIsLoading(true); // Indicamos que está en curso una operación
 
     try {
-      // Definimos la URL de redirección (usamos variable de entorno o fallback local || 'http://localhost:8081')
+      // Definimos la URL de redirección para OAuth || 'http://localhost:8081'
       const redirectTo = process.env.EXPO_PUBLIC_BASE_URL ;
 
-      // Iniciamos el flujo de autenticación con Google usando Supabase
+      // Iniciamos el flujo de autenticación con Google a través de Supabase
       const { data, error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -105,25 +114,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             "https://www.googleapis.com/auth/fitness.body.read",
             "https://www.googleapis.com/auth/fitness.heart_rate.read",
             "https://www.googleapis.com/auth/fitness.sleep.read",
-          ].join(" "),
+          ].join(" "), // Scopes necesarios para Google Fit
         },
       });
 
-      // Si hay error, lanzamos la excepción
+      // Si hay un error en la autenticación, lo lanzamos
       if (error) throw error;
 
-      // Abrimos la URL de autenticación usando el navegador
-      const result = await WebBrowser.openAuthSessionAsync(data.url, redirectTo);
+      // Abrimos el navegador para que el usuario inicie sesión
+      const result = await WebBrowser.openAuthSessionAsync(data.url!, redirectTo);
 
-      // Verificamos si el resultado fue exitoso
+      // Verificamos si la autenticación fue exitosa
       if (result.type !== "success") {
-        console.warn("Inicio de sesión cancelado o fallido");
+        console.warn("⚠️ Inicio de sesión cancelado o fallido");
         Alert.alert("Error", "Inicio de sesión cancelado o fallido.");
       } else {
-        // Revalidamos la sesión para acceder al token
+        // Revalidamos la sesión para obtener el provider_token
         const { data: sessionData } = await supabase.auth.getSession();
 
-        // Si no se otorgó el token de Google Fit, informamos al usuario
+        // Si no se obtuvo el provider_token, informamos al usuario
         if (!sessionData.session?.provider_token) {
           Alert.alert("Error", "No se concedieron los permisos para Google Fit.");
         } else {
@@ -132,17 +141,16 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         }
       }
     } catch (err) {
-      // Manejo de errores (distinguiendo si es Error de JS o genérico)
+      // Manejamos errores de autenticación
       if (err instanceof Error) {
-        console.error("Error al iniciar sesión con Google:", err.message);
+        console.error("❌ Error al iniciar sesión con Google:", err.message);
         Alert.alert("Error", `Error al iniciar sesión: ${err.message}`);
       } else {
-        console.error("Error desconocido al iniciar sesión con Google:", err);
+        console.error("❌ Error desconocido al iniciar sesión con Google:", err);
         Alert.alert("Error", "Error desconocido al iniciar sesión.");
       }
     } finally {
-      // Quitamos el estado de carga
-      setIsLoading(false);
+      setIsLoading(false); // Finalizamos el estado de carga
     }
   };
 
@@ -152,29 +160,59 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const { error } = await supabase.auth.signOut();
 
     if (error) {
+      // Si hay un error al cerrar sesión, mostramos una alerta
       console.error("❌ Error al cerrar sesión:", error.message);
       Alert.alert("Error", `Error al cerrar sesión: ${error.message}`);
     } else {
-      setSession(null); // Borramos la sesión local
+      // Cerramos la sesión localmente y redirigimos al login
+      setSession(null);
       console.log("✅ signOut completo, navegando a /login");
-      router.replace("/login"); // Redirigimos al login
+      router.replace("/login");
     }
   };
 
-  // Función que devuelve el token de acceso (Google Fit)
-  const getAccessToken = async () => {
+  // Función para obtener el token de acceso de Google Fit
+  const getAccessToken = async (): Promise<string | null> => {
+    // Obtenemos la sesión actual
     const { data, error } = await supabase.auth.getSession();
-    if (error || !data.session?.provider_token) {
-      console.error("Error al obtener el token de acceso:", error?.message);
-      Alert.alert("Error", "No se pudo obtener el token de acceso para Google Fit.");
-      return null;
+    
+    // Si hay un error o no hay sesión, intentamos refrescar
+    if (error || !data.session) {
+      console.log("🔄 No hay sesión, intentando refrescar...");
+      const refreshResult = await supabase.auth.refreshSession();
+      if (refreshResult.error || !refreshResult.data.session?.provider_token) {
+        // Si falla el refresco o no hay provider_token, cerramos la sesión
+        console.error("❌ Error al refrescar el token:", refreshResult.error?.message);
+        Alert.alert("Error", "Sesión expirada. Por favor, iniciá sesión nuevamente.");
+        await supabase.auth.signOut();
+        router.replace("/login");
+        return null;
+      }
+      // Retornamos el provider_token de la sesión refrescada
+      return refreshResult.data.session.provider_token;
     }
 
-    // Retornamos el token para usar con Google Fit API
+    // Si no hay provider_token en la sesión actual, intentamos refrescar
+    if (!data.session.provider_token) {
+      console.log("🔄 No hay provider_token, intentando refrescar...");
+      const refreshResult = await supabase.auth.refreshSession();
+      if (refreshResult.error || !refreshResult.data.session?.provider_token) {
+        // Si falla el refresco o no hay provider_token, cerramos la sesión
+        console.error("❌ Error al refrescar el token:", refreshResult.error?.message);
+        Alert.alert("Error", "Sesión expirada. Por favor, iniciá sesión nuevamente.");
+        await supabase.auth.signOut();
+        router.replace("/login");
+        return null;
+      }
+      // Retornamos el provider_token de la sesión refrescada
+      return refreshResult.data.session.provider_token;
+    }
+
+    // Retornamos el provider_token de la sesión actual
     return data.session.provider_token;
   };
 
-  // Proveemos el contexto con todos los valores y funciones necesarias
+  // Proveemos el contexto con las funciones y estados necesarios
   return (
     <AuthContext.Provider
       value={{ session, isLoading, signInWithGoogle, signOut, getAccessToken }}
@@ -184,5 +222,5 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   );
 };
 
-// Hook personalizado para consumir el contexto
+// Hook personalizado para consumir el contexto de autenticación
 export const useAuth = () => useContext(AuthContext);
