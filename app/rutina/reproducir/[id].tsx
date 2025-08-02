@@ -550,84 +550,119 @@ export default function RoutinePlayerScreen() {
     console.log(`🔁 Reiniciando rutina: ${routine.name}`);
   }, [routine, playSound]);
 
-  // Maneja la finalización de un ejercicio
-  const handleExerciseCompletion = useCallback(async () => {
-    const block = routine?.blocks?.[routineProgress.blockIndex];
-    const exercise = block?.exercises?.[routineProgress.exerciseIndex];
-    if (!block || !exercise) {
-      endRoutine();
-      return;
-    }
+// Maneja la finalización de un ejercicio, decidiendo si pasar al siguiente ejercicio, repetir el actual o avanzar al siguiente bloque
+const handleExerciseCompletion = useCallback(async () => {
+  // Obtenemos el bloque actual y el ejercicio actual desde el estado de la rutina
+  const block = routine?.blocks?.[routineProgress.blockIndex];
+  const exercise = block?.exercises?.[routineProgress.exerciseIndex];
+  
+  // Si no hay bloque o ejercicio válido, terminamos la rutina
+  if (!block || !exercise) {
+    endRoutine();
+    return;
+  }
 
-    if (block.is_preparation) {
-      console.log(`🎯 Bloque de preparación finalizado: ${block.title}`);
-      await goToNextBlock();
-    } else if (
-      exercise.reps &&
-      routineProgress.exerciseRepeat < exercise.reps
-    ) {
-      const restDuration =
-        routine?.rest_between_exercises ?? DEFAULT_REST_DURATION;
-      setPlayerState((prev) => ({
-        ...prev,
-        isResting: true,
-        isRepeatingExercise: true,
-        isRestBetweenBlocks: false,
-        isActive: true,
-      }));
-      startTimer(restDuration);
-      console.log(
-        `⏳ Iniciando descanso entre repeticiones (${restDuration}s)`
-      );
-    } else {
-      const restDuration =
-        routine?.rest_between_exercises ?? DEFAULT_REST_DURATION;
-      setPlayerState((prev) => ({
-        ...prev,
-        isResting: true,
-        isRepeatingExercise: false,
-        isRestBetweenBlocks: false,
-        isActive: true,
-      }));
-      startTimer(restDuration);
-      console.log(`⏳ Iniciando descanso entre ejercicios (${restDuration}s)`);
-    }
-  }, [
-    routine,
-    routineProgress.blockIndex,
-    routineProgress.exerciseRepeat,
-    startTimer,
-    goToNextBlock,
-    endRoutine,
-  ]);
+  // Si el bloque es de preparación, avanzamos directamente al siguiente bloque
+  if (block.is_preparation) {
+    console.log(`🎯 Bloque de preparación finalizado: ${block.title}`);
+    await goToNextBlock();
+  } 
+  // Si el ejercicio tiene repeticiones y no hemos alcanzado el total, iniciamos un descanso entre repeticiones
+  else if (
+    exercise.reps &&
+    routineProgress.exerciseRepeat < exercise.reps
+  ) {
+    // Usamos el descanso entre ejercicios definido en la rutina o el valor por defecto
+    const restDuration =
+      routine?.rest_between_exercises ?? DEFAULT_REST_DURATION;
+    // Actualizamos el estado para indicar que estamos en descanso y repitiendo el ejercicio
+    setPlayerState((prev) => ({
+      ...prev,
+      isResting: true, // Indicamos que estamos en descanso
+      isRepeatingExercise: true, // Marcamos que es un descanso entre repeticiones
+      isRestBetweenBlocks: false, // No es un descanso entre bloques
+      isActive: true, // Mantenemos el reproductor activo
+    }));
+    // Iniciamos el temporizador para el descanso
+    startTimer(restDuration);
+    console.log(
+      `⏳ Iniciando descanso entre repeticiones (${restDuration}s) para ${exercise.name} (repetición ${routineProgress.exerciseRepeat}/${exercise.reps})`
+    );
+  } 
+  // Si no hay más repeticiones, iniciamos un descanso antes de pasar al siguiente ejercicio
+  else {
+    // Usamos el descanso entre ejercicios definido en la rutina o el valor por defecto
+    const restDuration =
+      routine?.rest_between_exercises ?? DEFAULT_REST_DURATION;
+    // Actualizamos el estado para indicar que estamos en descanso
+    setPlayerState((prev) => ({
+      ...prev,
+      isResting: true, // Indicamos que estamos en descanso
+      isRepeatingExercise: false, // No es un descanso entre repeticiones
+      isRestBetweenBlocks: false, // No es un descanso entre bloques
+      isActive: true, // Mantenemos el reproductor activo
+    }));
+    // Reseteamos el contador de repeticiones para el siguiente ejercicio
+    setRoutineProgress((prev) => ({
+      ...prev,
+      exerciseRepeat: 1, // Reiniciamos a 1 para el próximo ejercicio
+    }));
+    // Iniciamos el temporizador para el descanso
+    startTimer(restDuration);
+    console.log(
+      `⏳ Iniciando descanso entre ejercicios (${restDuration}s) para ${exercise.name}`
+    );
+  }
+}, [
+  routine, // Dependencia: la rutina actual
+  routineProgress.blockIndex, // Dependencia: índice del bloque actual
+  routineProgress.exerciseRepeat, // Dependencia: contador de repeticiones
+  routineProgress.exerciseIndex, // Dependencia: índice del ejercicio actual
+  startTimer, // Dependencia: función para iniciar el temporizador
+  goToNextBlock, // Dependencia: función para avanzar al siguiente bloque
+  endRoutine, // Dependencia: función para finalizar la rutina
+]);
 
   // Maneja la finalización de un descanso
   const handleRestCompletion = useCallback(async () => {
     setPlayerState((prev) => ({ ...prev, isResting: false }));
     if (playerState.isRepeatingExercise) {
-      const exercise =
-        routine?.blocks?.[routineProgress.blockIndex]?.exercises?.[
-          routineProgress.exerciseIndex
-        ];
-      const duration = exercise?.duration ?? DEFAULT_EXERCISE_DURATION;
-      setRoutineProgress((prev) => ({
-        ...prev,
-        exerciseRepeat: prev.exerciseRepeat + 1,
-      }));
-      setPlayerState((prev) => ({
-        ...prev,
-        isRepeatingExercise: false,
-        isRestBetweenBlocks: false,
-        isActive: true,
-      }));
-      startTimer(duration);
-      await playSound("start");
-      console.log(
-        `🔁 Volviendo al ejercicio: ${exercise?.name} (repetición ${
-          routineProgress.exerciseRepeat + 1
-        })`
-      );
-    } else if (playerState.isRestBetweenBlocks) {
+  // Obtenemos el ejercicio actual
+  const exercise =
+    routine?.blocks?.[routineProgress.blockIndex]?.exercises?.[
+      routineProgress.exerciseIndex
+    ];
+  // Verificamos que el ejercicio exista
+  if (!exercise) {
+    console.error("❌ Ejercicio no encontrado al intentar repetir");
+    // Si no existe, terminamos la rutina
+    endRoutine();
+    return;
+  }
+  // Usamos la duración del ejercicio o la duración por defecto
+  const duration = exercise.duration ?? DEFAULT_EXERCISE_DURATION;
+  // Incrementamos el contador de repeticiones
+  setRoutineProgress((prev) => ({
+    ...prev,
+    exerciseRepeat: prev.exerciseRepeat + 1,
+  }));
+  // Actualizamos el estado para volver al ejercicio
+  setPlayerState((prev) => ({
+    ...prev,
+    isRepeatingExercise: false, // Desactivamos el estado de repetición
+    isRestBetweenBlocks: false, // No es descanso entre bloques
+    isActive: true, // Mantenemos el reproductor activo
+  }));
+  // Iniciamos el temporizador para la siguiente repetición
+  startTimer(duration);
+  // Reproducimos el sonido de inicio
+  await playSound("start");
+  console.log(
+    `🔁 Volviendo al ejercicio: ${exercise.name} (repetición ${
+      routineProgress.exerciseRepeat + 1
+    }/${exercise.reps || 1})`
+  );
+} else if (playerState.isRestBetweenBlocks) {
       await goToNextBlock();
     } else {
       await goToNextExercise();
@@ -643,49 +678,60 @@ export default function RoutinePlayerScreen() {
     playSound,
     goToNextBlock,
     goToNextExercise,
-  ]);
-
-  // Avanza al siguiente ejercicio, repetición, bloque o finaliza
-  const proceedToNext = useCallback(async () => {
-    if (
-      !routine?.blocks?.[routineProgress.blockIndex]?.exercises?.[
-        routineProgress.exerciseIndex
-      ]
-    ) {
-      console.error("❌ Rutina o ejercicio no válido");
-      endRoutine();
-      return;
-    }
-
-    await stopBeep();
-    if (playerState.isResting) {
-      console.log(
-        `⏳ Finalizando descanso (repetir ejercicio: ${playerState.isRepeatingExercise}, descanso entre bloques: ${playerState.isRestBetweenBlocks})`
-      );
-      await handleRestCompletion();
-    } else {
-      console.log(
-        `🏋️ Finalizando ejercicio: ${
-          routine.blocks[routineProgress.blockIndex].exercises[
-            routineProgress.exerciseIndex
-          ].name
-        }`
-      );
-      await handleExerciseCompletion();
-    }
-  }, [
-    routine,
-    routineProgress.blockIndex,
-    routineProgress.exerciseIndex,
-    playerState.isResting,
-    playerState.isRepeatingExercise,
-    playerState.isRestBetweenBlocks,
-    stopBeep,
-    handleRestCompletion,
-    handleExerciseCompletion,
     endRoutine,
   ]);
 
+  // Maneja el avance al siguiente paso (ejercicio, repetición, bloque o fin de la rutina)
+const proceedToNext = useCallback(async () => {
+  // Verificamos que el ejercicio actual exista
+  if (
+    !routine?.blocks?.[routineProgress.blockIndex]?.exercises?.[
+      routineProgress.exerciseIndex
+    ]
+  ) {
+    console.error("❌ Rutina o ejercicio no válido");
+    // Si no es válido, terminamos la rutina
+    endRoutine();
+    return;
+  }
+
+  // Detenemos cualquier sonido de beep que esté sonando
+  await stopBeep();
+  
+  // Si estamos en un descanso, manejamos la finalización del descanso
+  if (playerState.isResting) {
+    console.log(
+      `⏳ Finalizando descanso (repetir ejercicio: ${playerState.isRepeatingExercise}, descanso entre bloques: ${playerState.isRestBetweenBlocks})`
+    );
+    // Llamamos a la función que maneja el fin del descanso
+    await handleRestCompletion();
+  } 
+  // Si no estamos en descanso, manejamos la finalización del ejercicio
+  else {
+    // Obtenemos el ejercicio actual para los logs
+    const exercise =
+      routine.blocks[routineProgress.blockIndex].exercises[
+        routineProgress.exerciseIndex
+      ];
+    console.log(
+      `🏋️ Finalizando ejercicio: ${exercise.name} (repetición ${routineProgress.exerciseRepeat}/${exercise.reps || 1})`
+    );
+    // Llamamos a la función que maneja el fin del ejercicio
+    await handleExerciseCompletion();
+  }
+}, [
+  routine, // Dependencia: la rutina actual
+  routineProgress.blockIndex, // Dependencia: índice del bloque actual
+  routineProgress.exerciseIndex, // Dependencia: índice del ejercicio actual
+  routineProgress.exerciseRepeat, // Dependencia: contador de repeticiones
+  playerState.isResting, // Dependencia: estado de descanso
+  playerState.isRepeatingExercise, // Dependencia: estado de repetición de ejercicio
+  playerState.isRestBetweenBlocks, // Dependencia: estado de descanso entre bloques
+  stopBeep, // Dependencia: función para detener el sonido de beep
+  handleRestCompletion, // Dependencia: función para manejar el fin del descanso
+  handleExerciseCompletion, // Dependencia: función para manejar el fin del ejercicio
+  endRoutine, // Dependencia: función para finalizar la rutina
+]);
   // Efecto para manejar el temporizador
   useEffect(() => {
     if (!playerState.isActive || playerState.isPaused || !initialized) {
@@ -868,120 +914,139 @@ export default function RoutinePlayerScreen() {
     );
   }
 
-  // Variables para el bloque y ejercicio actual
-  const block = routine.blocks[routineProgress.blockIndex];
-  const exercise = block.exercises[routineProgress.exerciseIndex];
-  const nextBlock = routine.blocks[routineProgress.blockIndex + 1];
-  const nextExercise = block.exercises[routineProgress.exerciseIndex + 1];
+// --- Sección de renderizado (reemplazar desde la definición de variables hasta el JSX correspondiente) ---
 
-  // Mostrar "Siguiente" según el tipo de descanso o bloque
-  const showNextBlock =
-    (block.is_preparation || playerState.isRestBetweenBlocks) && nextBlock;
-  const showNextExercise =
+// Variables para el bloque y ejercicio actual
+const block = routine.blocks[routineProgress.blockIndex];
+const exercise = block.exercises[routineProgress.exerciseIndex];
+const nextBlock = routine.blocks[routineProgress.blockIndex + 1];
+const nextExercise = block.exercises[routineProgress.exerciseIndex + 1];
+
+// Determina si hay repeticiones pendientes del ejercicio actual
+const hasPendingReps =
+  !block.is_preparation &&
+  exercise.reps &&
+  routineProgress.exerciseRepeat < exercise.reps;
+
+// Define el texto para "Siguiente" según el estado
+const nextText = (() => {
+  // Si estamos en un descanso entre bloques y hay un siguiente bloque, mostramos su título
+  if ((block.is_preparation || playerState.isRestBetweenBlocks) && nextBlock) {
+    return `Siguiente: ${nextBlock.title}`;
+  }
+  // Si estamos repitiendo el ejercicio actual, mostramos que viene otra repetición
+  if (playerState.isResting && playerState.isRepeatingExercise && hasPendingReps) {
+    return `Siguiente: ${exercise.name} (Repetición ${routineProgress.exerciseRepeat + 1}/${exercise.reps})`;
+  }
+  // Si estamos en un descanso entre ejercicios (no repeticiones) y hay un siguiente ejercicio, mostramos su nombre y repeticiones
+  if (
     playerState.isResting &&
     !playerState.isRestBetweenBlocks &&
     !block.is_preparation &&
-    nextExercise;
+    nextExercise
+  ) {
+    return nextExercise.reps
+      ? `Siguiente: ${nextExercise.name} (${nextExercise.reps} repeticiones)`
+      : `Siguiente: ${nextExercise.name}`;
+  }
+  // Si no hay nada que mostrar, retornamos null
+  return null;
+})();
 
-  // Renderizado del reproductor
-  return (
-    <ScrollView
-      style={[styles.container, { backgroundColor: colors.background }]}
-      contentContainerStyle={{ alignItems: "center", paddingBottom: 60 }}
-      keyboardShouldPersistTaps="handled"
-    >
-      <View style={styles.content}>
-        {audioError && (
-          <Text style={[styles.error, { color: colors.error }]}>
-            {audioError}
-          </Text>
-        )}
-        <Text style={[styles.block, { color: colors.meta }]}>
-          {block.title} — Vuelta {routineProgress.blockRepeat}/{block.repeat}
+// Renderizado del reproductor
+return (
+  <ScrollView
+    style={[styles.container, { backgroundColor: colors.background }]}
+    contentContainerStyle={{ alignItems: "center", paddingBottom: 60 }}
+    keyboardShouldPersistTaps="handled"
+  >
+    <View style={styles.content}>
+      {audioError && (
+        <Text style={[styles.error, { color: colors.error }]}>
+          {audioError}
         </Text>
-        <Text style={[styles.exercise, { color: colors.title }]}>
-          {playerState.isRestBetweenBlocks
-            ? "Descanso entre bloques"
-            : playerState.isResting
-            ? "Descanso"
-            : exercise.name}
+      )}
+      <Text style={[styles.block, { color: colors.meta }]}>
+        {block.title} — Vuelta {routineProgress.blockRepeat}/{block.repeat}
+      </Text>
+      <Text style={[styles.exercise, { color: colors.title }]}>
+        {playerState.isRestBetweenBlocks
+          ? "Descanso entre bloques"
+          : playerState.isResting
+          ? "Descanso"
+          : exercise.name}
+      </Text>
+      {nextText && (
+        <Text style={[styles.nextBlock, { color: colors.meta }]}>
+          {nextText}
         </Text>
-        {showNextBlock && (
-          <Text style={[styles.nextBlock, { color: colors.meta }]}>
-            Siguiente: {nextBlock.title}
-          </Text>
-        )}
-        {showNextExercise && (
-          <Text style={[styles.nextBlock, { color: colors.meta }]}>
-            Siguiente: {nextExercise.name}
-          </Text>
-        )}
-        {exercise.reps && !playerState.isResting && (
-          <Text style={[styles.reps, { color: colors.meta }]}>
-            Repetición {routineProgress.exerciseRepeat}/{exercise.reps}
-          </Text>
-        )}
-        <Text style={[styles.timer, { color: colors.timer }]}>
-          {playerState.countdown}s
+      )}
+      {exercise.reps && !playerState.isResting && (
+        <Text style={[styles.reps, { color: colors.meta }]}>
+          Repetición {routineProgress.exerciseRepeat}/{exercise.reps}
         </Text>
-        {exercise.equipment && !playerState.isResting && (
-          <Text style={[styles.equipment, { color: colors.meta }]}>
-            {exercise.equipment}
+      )}
+      <Text style={[styles.timer, { color: colors.timer }]}>
+        {playerState.countdown}s
+      </Text>
+      {exercise.equipment && !playerState.isResting && (
+        <Text style={[styles.equipment, { color: colors.meta }]}>
+          {exercise.equipment}
+        </Text>
+      )}
+      <View style={styles.controls}>
+        <Pressable
+          onPress={togglePause}
+          style={[styles.button, { backgroundColor: colors.button }]}
+        >
+          <Text style={[styles.buttonText, { color: colors.buttonText }]}>
+            {playerState.isPaused ? "▶ Continuar" : "⏸ Pausar"}
           </Text>
-        )}
-        <View style={styles.controls}>
-          <Pressable
-            onPress={togglePause}
-            style={[styles.button, { backgroundColor: colors.button }]}
-          >
-            <Text style={[styles.buttonText, { color: colors.buttonText }]}>
-              {playerState.isPaused ? "▶ Continuar" : "⏸ Pausar"}
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={goToNextExercise}
-            style={[styles.button, { backgroundColor: colors.button }]}
-          >
-            <Text style={[styles.buttonText, { color: colors.buttonText }]}>
-              ⏭️ Siguiente Ejercicio
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={goToNextBlock}
-            style={[styles.button, { backgroundColor: colors.button }]}
-          >
-            <Text style={[styles.buttonText, { color: colors.buttonText }]}>
-              ⏭️ Siguiente Bloque
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={resetExercise}
-            style={[styles.button, { backgroundColor: colors.button }]}
-          >
-            <Text style={[styles.buttonText, { color: colors.buttonText }]}>
-              🔁 Ejercicio
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={resetBlock}
-            style={[styles.button, { backgroundColor: colors.button }]}
-          >
-            <Text style={[styles.buttonText, { color: colors.buttonText }]}>
-              🔁 Bloque
-            </Text>
-          </Pressable>
-          <Pressable
-            onPress={resetRoutine}
-            style={[styles.button, { backgroundColor: colors.button }]}
-          >
-            <Text style={[styles.buttonText, { color: colors.buttonText }]}>
-              🔁 Rutina
-            </Text>
-          </Pressable>
-        </View>
+        </Pressable>
+        <Pressable
+          onPress={goToNextExercise}
+          style={[styles.button, { backgroundColor: colors.button }]}
+        >
+          <Text style={[styles.buttonText, { color: colors.buttonText }]}>
+            ⏭️ Siguiente Ejercicio
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={goToNextBlock}
+          style={[styles.button, { backgroundColor: colors.button }]}
+        >
+          <Text style={[styles.buttonText, { color: colors.buttonText }]}>
+            ⏭️ Siguiente Bloque
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={resetExercise}
+          style={[styles.button, { backgroundColor: colors.button }]}
+        >
+          <Text style={[styles.buttonText, { color: colors.buttonText }]}>
+            🔁 Ejercicio
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={resetBlock}
+          style={[styles.button, { backgroundColor: colors.button }]}
+        >
+          <Text style={[styles.buttonText, { color: colors.buttonText }]}>
+            🔁 Bloque
+          </Text>
+        </Pressable>
+        <Pressable
+          onPress={resetRoutine}
+          style={[styles.button, { backgroundColor: colors.button }]}
+        >
+          <Text style={[styles.buttonText, { color: colors.buttonText }]}>
+            🔁 Rutina
+          </Text>
+        </Pressable>
       </View>
-    </ScrollView>
-  );
+    </View>
+  </ScrollView>
+);
 }
 
 // Estilos para el componente
